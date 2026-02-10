@@ -1,8 +1,0 @@
-{
-  "/dashboard/page": "app/dashboard/page.js",
-  "/auth/face-student/page": "app/auth/face-student/page.js",
-  "/dashboard/payment/page": "app/dashboard/payment/page.js",
-  "/dashboard/receipt/page": "app/dashboard/receipt/page.js",
-  "/dashboard/downloads/page": "app/dashboard/downloads/page.js",
-  "/dashboard/request/page": "app/dashboard/request/page.js"
-}
