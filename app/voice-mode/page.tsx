@@ -27,6 +27,8 @@ export default function VoiceModePage() {
   const [isMuted, setIsMuted] = useState(false)
   const recognitionRef = useRef<any>(null)
   const synthRef = useRef<SpeechSynthesis | null>(null)
+  const hasSpokenRef = useRef(false);
+
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -115,20 +117,35 @@ export default function VoiceModePage() {
 
     switch (step) {
       case "welcome":
-      case "auth-choice":
-        if (lowerText.includes("email") && !lowerText.includes("face")) {
-          setStep("email-input")
-          speak("Great! Please say your school email address clearly.")
-        } else if (lowerText.includes("face") || lowerText.includes("recognition")) {
-          setStep("student-number")
-          speak("Perfect! Please say your student number clearly.")
-        } else if (lowerText.includes("both") || lowerText.includes("combined")) {
-          setStep("email-input")
-          speak("Excellent choice for maximum security. Let's start with your email address.")
-        } else {
-          speak("I didn't catch that. Please say email, face recognition, or both.")
-        }
-        break
+  case "auth-choice": {
+    // Check for greetings first
+    if (
+      lowerText.includes("hello") ||
+      lowerText.includes("hi") ||
+      lowerText.includes("hey")
+    ) {
+      speak(
+        "Hello! What would you like to do? You can say email, face recognition, or both."
+      );
+    } else if (lowerText.includes("email") && !lowerText.includes("face")) {
+      setStep("email-input");
+      speak("Great! Please say your school email address clearly.");
+    } else if (lowerText.includes("face") || lowerText.includes("recognition")) {
+      setStep("student-number");
+      speak("Perfect! Please say your student number clearly.");
+    } else if (lowerText.includes("both") || lowerText.includes("combined")) {
+      setStep("email-input");
+      speak(
+        "Excellent choice for maximum security. Let's start with your email address."
+      );
+    } else {
+      speak(
+        "I didn't catch that. Please say email, face recognition, or both."
+      );
+    }
+    break;
+  }
+
 
       case "email-input":
         speak(`I heard ${text}. Is that correct? Say yes to continue or no to try again.`)
