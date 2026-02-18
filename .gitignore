@@ -1,6 +1,7 @@
 node_modules/
 .next/
 .env
+.env.local
 .DS_Store
 dist/
 build/
@@ -12,3 +13,6 @@ yarn-error.log*
 /.turbo
 /.cache
 *.lognode_modules
+
+/lib/generated/prisma
+prisma/dev.db
