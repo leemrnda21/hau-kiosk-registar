@@ -24,6 +24,7 @@ export default function FaceEnrollmentPage() {
   const [capturedFaceCount, setCapturedFaceCount] = useState(0);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [capturedDescriptors, setCapturedDescriptors] = useState<number[][]>([]);
+  const [enrolledFacesDebug, setEnrolledFacesDebug] = useState<string | null>(null);
 
   useEffect(() => {
     // Load face-api.js script
@@ -67,6 +68,15 @@ export default function FaceEnrollmentPage() {
     };
     script.onerror = () => console.error('Failed to load face-api.js');
     document.body.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('faceEnrollments') || '{}';
+      setEnrolledFacesDebug(JSON.stringify(JSON.parse(raw), null, 2));
+    } catch (e) {
+      setEnrolledFacesDebug('{}');
+    }
   }, []);
 
   useEffect(() => {
@@ -417,7 +427,7 @@ export default function FaceEnrollmentPage() {
       <div style={{ marginTop: 24, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4, fontSize: 12 }}>
         <h4 style={{ margin: '0 0 8px 0' }}>🔍 Debug - Enrolled Faces in Storage:</h4>
         <pre style={{ margin: 0, padding: 8, backgroundColor: '#fff', borderRadius: 4, overflow: 'auto', maxHeight: 150 }}>
-          {typeof window !== 'undefined' ? JSON.stringify(JSON.parse(localStorage.getItem('faceEnrollments') || '{}'), null, 2) : 'Loading...'}
+          {enrolledFacesDebug ? enrolledFacesDebug : null}
         </pre>
       </div>
     </div>
