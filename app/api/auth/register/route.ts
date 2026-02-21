@@ -8,6 +8,8 @@ type RegisterPayload = {
   studentNo: string;
   firstName: string;
   lastName: string;
+  course: string;
+  yearLevel: string;
   email: string;
   password: string;
 };
@@ -19,10 +21,12 @@ export async function POST(request: Request) {
     const studentNo = body.studentNo?.trim();
     const firstName = body.firstName?.trim();
     const lastName = body.lastName?.trim();
+    const course = body.course?.trim();
+    const yearLevel = body.yearLevel?.trim();
     const email = body.email?.trim().toLowerCase();
     const password = body.password?.trim();
 
-    if (!studentNo || !firstName || !lastName || !email || !password) {
+    if (!studentNo || !firstName || !lastName || !email || !password || !course || !yearLevel) {
       return NextResponse.json(
         { success: false, message: "Please fill in all required fields." },
         { status: 400 }
@@ -50,6 +54,8 @@ export async function POST(request: Request) {
         studentNo,
         firstName,
         lastName,
+        course,
+        yearLevel,
         email,
         passwordHash,
       },
@@ -58,6 +64,8 @@ export async function POST(request: Request) {
         studentNo: true,
         firstName: true,
         lastName: true,
+        course: true,
+        yearLevel: true,
         email: true,
       },
     });

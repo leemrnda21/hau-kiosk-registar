@@ -28,6 +28,8 @@ export default function RegisterPage() {
   const [studentNo, setStudentNo] = useState("")
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
+  const [course, setCourse] = useState("")
+  const [yearLevel, setYearLevel] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -46,6 +48,8 @@ export default function RegisterPage() {
           studentNo,
           firstName,
           lastName,
+          course,
+          yearLevel,
           email,
           password,
         }),
@@ -87,9 +91,11 @@ export default function RegisterPage() {
 
         <Card className="p-8">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-primary-foreground font-bold text-xl">HAU</span>
-            </div>
+            <img
+              src="/logo-circle.png"
+              alt="HAU seal"
+              className="w-16 h-16 rounded-full object-cover mx-auto mb-4"
+            />
             <h1 className="text-2xl font-bold text-foreground mb-2">Create Test Account</h1>
             <p className="text-sm text-muted-foreground">
               Register a student account and continue to face enrollment
@@ -150,6 +156,36 @@ export default function RegisterPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="course">Course</Label>
+              <Input
+                id="course"
+                type="text"
+                placeholder="BS Computer Science"
+                value={course}
+                onChange={(e) => setCourse(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="yearLevel">Year Level</Label>
+              <select
+                id="yearLevel"
+                value={yearLevel}
+                onChange={(e) => setYearLevel(e.target.value)}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select year level</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+                <option value="5th Year">5th Year</option>
+              </select>
             </div>
 
             <div className="space-y-2">

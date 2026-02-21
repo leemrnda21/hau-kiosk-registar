@@ -13,10 +13,33 @@ type CurrentUser = {
   email: string
 } | null
 
+type DashboardRequest = {
+  id: string
+  type: string
+  status: "pending" | "processing" | "submitted" | "ready"
+  referenceNo: string
+  requestedAt: string
+}
+
+type DashboardStats = {
+  pending: number
+  ready: number
+  submitted: number
+  total: number
+}
+
 export default function DashboardClient() {
   const router = useRouter()
   const [currentUser, setCurrentUser] = useState<CurrentUser>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [requests, setRequests] = useState<DashboardRequest[]>([])
+  const [stats, setStats] = useState<DashboardStats>({
+    pending: 0,
+    ready: 0,
+    submitted: 0,
+    total: 0,
+  })
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false)
 
   useEffect(() => {
     // Get user from sessionStorage
@@ -27,6 +50,44 @@ export default function DashboardClient() {
     }
     setIsLoading(false)
   }, [])
+
+  useEffect(() => {
+    if (!currentUser) {
+      return
+    }
+
+    const loadRequests = async () => {
+      setIsLoadingRequests(true)
+      try {
+        const response = await fetch(
+          `/api/dashboard/requests?studentNo=${encodeURIComponent(currentUser.studentNumber)}`
+        )
+        const data = await response.json()
+
+        if (!response.ok || !data.success) {
+          setRequests([])
+          setStats({ pending: 0, ready: 0, submitted: 0, total: 0 })
+          return
+        }
+
+        setRequests(data.requests || [])
+        setStats({
+          pending: data.stats?.pending ?? 0,
+          ready: data.stats?.ready ?? 0,
+          submitted: data.stats?.submitted ?? 0,
+          total: data.stats?.total ?? 0,
+        })
+      } catch (error) {
+        console.error("Failed to load requests:", error)
+        setRequests([])
+        setStats({ pending: 0, ready: 0, submitted: 0, total: 0 })
+      } finally {
+        setIsLoadingRequests(false)
+      }
+    }
+
+    loadRequests()
+  }, [currentUser])
 
   const handleLogout = () => {
     sessionStorage.removeItem('currentUser')
@@ -57,6 +118,32 @@ export default function DashboardClient() {
     )
   }
 
+  const statusPillClass = {
+    pending: "bg-slate-500/10 text-slate-700",
+    processing: "bg-yellow-500/10 text-yellow-700",
+    submitted: "bg-blue-500/10 text-blue-700",
+    ready: "bg-green-500/10 text-green-700",
+  } as const
+
+  const formatDate = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return value
+    }
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  }
+
+  const formatDocumentType = (value: string) => {
+    return value
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -64,9 +151,7 @@ export default function DashboardClient() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-primary-foreground font-bold">HAU</span>
-              </div>
+              <img src="/logo-circle.png" alt="HAU seal" className="w-10 h-10 rounded-full object-cover" />
               <div>
                 <h1 className="font-bold text-foreground">Holy Angel University</h1>
                 <p className="text-xs text-muted-foreground">Registrar Dashboard</p>
@@ -101,7 +186,7 @@ export default function DashboardClient() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Pending Requests</p>
-                <p className="text-3xl font-bold text-foreground">2</p>
+                <p className="text-3xl font-bold text-foreground">{stats.pending}</p>
               </div>
               <Clock className="w-10 h-10 text-primary" />
             </div>
@@ -110,7 +195,7 @@ export default function DashboardClient() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Ready to Download</p>
-                <p className="text-3xl font-bold text-foreground">1</p>
+                <p className="text-3xl font-bold text-foreground">{stats.ready}</p>
               </div>
               <Download className="w-10 h-10 text-green-500" />
             </div>
@@ -119,7 +204,7 @@ export default function DashboardClient() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Requests</p>
-                <p className="text-3xl font-bold text-foreground">5</p>
+                <p className="text-3xl font-bold text-foreground">{stats.total}</p>
               </div>
               <FileText className="w-10 h-10 text-blue-500" />
             </div>
@@ -166,66 +251,55 @@ export default function DashboardClient() {
             </Button>
           </div>
           <div className="space-y-4">
-            <Card className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <FileText className="w-5 h-5 text-primary" />
-                    <h4 className="font-semibold text-foreground">Transcript of Records (Official)</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">Reference: TOR-2024-001234</p>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-muted-foreground">Requested: Jan 5, 2025</span>
-                    <span className="px-3 py-1 bg-yellow-500/10 text-yellow-700 rounded-full text-xs font-medium">
-                      Processing
-                    </span>
-                  </div>
+            {isLoadingRequests ? (
+              <Card className="p-6">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">Loading recent requests...</p>
+                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                 </div>
-                <Button size="sm" variant="outline">
-                  Track
-                </Button>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <FileText className="w-5 h-5 text-primary" />
-                    <h4 className="font-semibold text-foreground">Certificate of Enrollment</h4>
+              </Card>
+            ) : requests.length === 0 ? (
+              <Card className="p-6">
+                <p className="text-sm text-muted-foreground">No recent requests yet.</p>
+              </Card>
+            ) : (
+              requests.map((request) => (
+                <Card className="p-6" key={request.id}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <FileText className="w-5 h-5 text-primary" />
+                        <h4 className="font-semibold text-foreground">
+                          {formatDocumentType(request.type)}
+                        </h4>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Reference: {request.referenceNo}
+                      </p>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-muted-foreground">
+                          Requested: {formatDate(request.requestedAt)}
+                        </span>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            statusPillClass[request.status]
+                          }`}
+                        >
+                          {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                        </span>
+                      </div>
+                    </div>
+                    {request.status === "ready" ? (
+                      <Button size="sm">Download</Button>
+                    ) : (
+                      <Button size="sm" variant="outline">
+                        Track
+                      </Button>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">Reference: COE-2024-001233</p>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-muted-foreground">Requested: Jan 3, 2025</span>
-                    <span className="px-3 py-1 bg-green-500/10 text-green-700 rounded-full text-xs font-medium">
-                      Ready
-                    </span>
-                  </div>
-                </div>
-                <Button size="sm">Download</Button>
-              </div>
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <FileText className="w-5 h-5 text-primary" />
-                    <h4 className="font-semibold text-foreground">Certificate of Good Moral Character</h4>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">Reference: GMC-2024-001232</p>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className="text-muted-foreground">Requested: Dec 28, 2024</span>
-                    <span className="px-3 py-1 bg-blue-500/10 text-blue-700 rounded-full text-xs font-medium">
-                      Submitted
-                    </span>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline">
-                  Track
-                </Button>
-              </div>
-            </Card>
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </main>

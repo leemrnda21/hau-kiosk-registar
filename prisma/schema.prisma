@@ -21,8 +21,14 @@ model Student {
   firstName   String
   lastName    String
   passwordHash String
+  course      String?
+  yearLevel   String?
+  phone       String?
+  address     String?
+  status      String       @default("Active")
   enrollments Enrollment[]
   faceEnrollment FaceEnrollment?
+  documentRequests DocumentRequest[]
   createdAt   DateTime     @default(now())
 }
 
@@ -62,4 +68,41 @@ model Enrollment {
   student    Student  @relation(fields: [studentId], references: [id])
   course     Course   @relation(fields: [courseId], references: [id])
   createdAt  DateTime @default(now())
+}
+
+enum DocumentStatus {
+  pending
+  processing
+  submitted
+  ready
+}
+
+enum DocumentType {
+  transcript_of_records_official
+  transcript_of_records_unofficial
+  certificate_of_good_moral_character
+  diploma
+  certificate_of_enrollment
+  certificate_of_grades
+  honorable_dismissal
+  certificate_of_transfer_credential
+  certificate_of_graduation
+  certificate_of_units_earned
+}
+
+model DocumentRequest {
+  id          String         @id @default(cuid())
+  studentId   String
+  student     Student        @relation(fields: [studentId], references: [id])
+  type        DocumentType
+  status      DocumentStatus
+  referenceNo String         @unique
+  requestedAt DateTime       @default(now())
+  completedAt DateTime?
+  copies      Int            @default(1)
+  purpose     String?
+  deliveryMethod String?
+  paymentMethod String?
+  totalAmount Int?
+  updatedAt   DateTime       @updatedAt
 }

@@ -7,40 +7,100 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 export default function TrackPage() {
   const searchParams = useSearchParams()
   const refNumber = searchParams.get("ref")
   const isNew = searchParams.get("new")
   const [searchRef, setSearchRef] = useState("")
+  const [requests, setRequests] = useState<
+    Array<{ id: string; type: string; status: string; referenceNo: string; requestedAt: string }>
+  >([])
+  const [loading, setLoading] = useState(true)
 
-  const mockRequests = [
-    {
-      ref: "TOR-2024-001234",
-      name: "Transcript of Records (Official)",
-      status: "processing",
-      date: "Jan 5, 2025",
-      timeline: [
-        { step: "Submitted", completed: true, date: "Jan 5, 2025 10:30 AM" },
-        { step: "Payment Verified", completed: true, date: "Jan 5, 2025 11:00 AM" },
+  useEffect(() => {
+    const userString = sessionStorage.getItem("currentUser")
+    const currentUser = userString ? JSON.parse(userString) : null
+
+    if (!currentUser?.studentNumber) {
+      setLoading(false)
+      return
+    }
+
+    const loadRequests = async () => {
+      try {
+        const url = new URL("/api/dashboard/requests", window.location.origin)
+        url.searchParams.set("studentNo", currentUser.studentNumber)
+        if (searchRef) {
+          url.searchParams.set("referenceNo", searchRef)
+        }
+
+        const response = await fetch(url)
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          setRequests([])
+          return
+        }
+        setRequests(data.requests || [])
+      } catch (error) {
+        console.error("Failed to load requests:", error)
+        setRequests([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadRequests()
+  }, [searchRef])
+
+  const formatDocumentType = (value: string) => {
+    return value
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  }
+
+  const formatDate = (value: string) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return value
+    }
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  }
+
+  const timelineForStatus = useMemo(() => {
+    return {
+      pending: [
+        { step: "Submitted", completed: true, date: "In Progress" },
+        { step: "Payment Verified", completed: false, date: "Pending" },
+        { step: "Processing", completed: false, date: "Pending" },
+        { step: "Ready", completed: false, date: "Pending" },
+      ],
+      processing: [
+        { step: "Submitted", completed: true, date: "Complete" },
+        { step: "Payment Verified", completed: true, date: "Complete" },
         { step: "Processing", completed: false, date: "In Progress" },
-        { step: "Ready for Pickup", completed: false, date: "Pending" },
+        { step: "Ready", completed: false, date: "Pending" },
       ],
-    },
-    {
-      ref: "COE-2024-001233",
-      name: "Certificate of Enrollment",
-      status: "ready",
-      date: "Jan 3, 2025",
-      timeline: [
-        { step: "Submitted", completed: true, date: "Jan 3, 2025 2:15 PM" },
-        { step: "Payment Verified", completed: true, date: "Jan 3, 2025 2:30 PM" },
-        { step: "Processing", completed: true, date: "Jan 4, 2025 9:00 AM" },
-        { step: "Ready for Download", completed: true, date: "Jan 5, 2025 3:00 PM" },
+      submitted: [
+        { step: "Submitted", completed: true, date: "Complete" },
+        { step: "Payment Verified", completed: true, date: "Complete" },
+        { step: "Processing", completed: true, date: "Complete" },
+        { step: "Ready", completed: false, date: "Pending" },
       ],
-    },
-  ]
+      ready: [
+        { step: "Submitted", completed: true, date: "Complete" },
+        { step: "Payment Verified", completed: true, date: "Complete" },
+        { step: "Processing", completed: true, date: "Complete" },
+        { step: "Ready", completed: true, date: "Complete" },
+      ],
+    } as const
+  }, [])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -48,7 +108,7 @@ export default function TrackPage() {
         return <Clock className="w-5 h-5 text-yellow-500" />
       case "ready":
         return <CheckCircle2 className="w-5 h-5 text-green-500" />
-      case "shipped":
+      case "submitted":
         return <Truck className="w-5 h-5 text-blue-500" />
       default:
         return <Package className="w-5 h-5 text-muted-foreground" />
@@ -61,7 +121,7 @@ export default function TrackPage() {
         return "bg-yellow-500/10 text-yellow-700"
       case "ready":
         return "bg-green-500/10 text-green-700"
-      case "shipped":
+      case "submitted":
         return "bg-blue-500/10 text-blue-700"
       default:
         return "bg-muted text-muted-foreground"
@@ -116,7 +176,7 @@ export default function TrackPage() {
                 onChange={(e) => setSearchRef(e.target.value)}
               />
             </div>
-            <Button>
+            <Button onClick={() => setSearchRef(searchRef.trim())}>
               <Search className="w-4 h-4 mr-2" />
               Search
             </Button>
@@ -126,53 +186,63 @@ export default function TrackPage() {
         {/* All Requests */}
         <div className="space-y-6">
           <h2 className="text-xl font-bold text-foreground">All Requests</h2>
-          {mockRequests.map((request) => (
-            <Card key={request.ref} className="p-6">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    {getStatusIcon(request.status)}
-                    <h3 className="font-bold text-foreground text-lg">{request.name}</h3>
+          {loading ? (
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground">Loading requests...</p>
+            </Card>
+          ) : requests.length === 0 ? (
+            <Card className="p-6">
+              <p className="text-sm text-muted-foreground">No requests found.</p>
+            </Card>
+          ) : (
+            requests.map((request) => (
+              <Card key={request.referenceNo} className="p-6">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      {getStatusIcon(request.status)}
+                      <h3 className="font-bold text-foreground text-lg">{formatDocumentType(request.type)}</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">Reference: {request.referenceNo}</p>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
+                      {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                    </span>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-2">Reference: {request.ref}</p>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
-                    {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                  </span>
+                  <p className="text-sm text-muted-foreground">{formatDate(request.requestedAt)}</p>
                 </div>
-                <p className="text-sm text-muted-foreground">{request.date}</p>
-              </div>
 
-              {/* Timeline */}
-              <div className="space-y-4">
-                {request.timeline.map((item, index) => (
-                  <div key={index} className="flex items-start gap-4">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                          item.completed ? "bg-green-500" : "bg-muted"
-                        }`}
-                      >
-                        {item.completed ? (
-                          <CheckCircle2 className="w-5 h-5 text-white" />
-                        ) : (
-                          <div className="w-3 h-3 rounded-full bg-muted-foreground" />
+                {/* Timeline */}
+                <div className="space-y-4">
+                  {(timelineForStatus[request.status as keyof typeof timelineForStatus] || []).map((item, index) => (
+                    <div key={index} className="flex items-start gap-4">
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            item.completed ? "bg-green-500" : "bg-muted"
+                          }`}
+                        >
+                          {item.completed ? (
+                            <CheckCircle2 className="w-5 h-5 text-white" />
+                          ) : (
+                            <div className="w-3 h-3 rounded-full bg-muted-foreground" />
+                          )}
+                        </div>
+                        {index < (timelineForStatus[request.status as keyof typeof timelineForStatus] || []).length - 1 && (
+                          <div className={`w-0.5 h-12 ${item.completed ? "bg-green-500" : "bg-muted"}`} />
                         )}
                       </div>
-                      {index < request.timeline.length - 1 && (
-                        <div className={`w-0.5 h-12 ${item.completed ? "bg-green-500" : "bg-muted"}`} />
-                      )}
+                      <div className="flex-1 pt-1">
+                        <p className={`font-medium ${item.completed ? "text-foreground" : "text-muted-foreground"}`}>
+                          {item.step}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{item.date}</p>
+                      </div>
                     </div>
-                    <div className="flex-1 pt-1">
-                      <p className={`font-medium ${item.completed ? "text-foreground" : "text-muted-foreground"}`}>
-                        {item.step}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{item.date}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          ))}
+                  ))}
+                </div>
+              </Card>
+            ))
+          )}
         </div>
       </main>
     </div>

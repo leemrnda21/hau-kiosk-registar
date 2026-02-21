@@ -73,8 +73,16 @@ export default function RequestPage() {
   }
 
   const handleSubmit = () => {
+    const userString = sessionStorage.getItem("currentUser")
+    const currentUser = userString ? JSON.parse(userString) : null
+
+    if (!currentUser?.studentNumber) {
+      return
+    }
+
     // Store request data in sessionStorage for payment page
     const requestData = {
+      studentNo: currentUser.studentNumber,
       documents: selectedDocs.map((docId) => ({
         id: docId,
         name: documents.find((d) => d.id === docId)?.name,

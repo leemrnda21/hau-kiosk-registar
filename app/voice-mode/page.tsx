@@ -476,7 +476,11 @@ export default function VoiceModePage() {
               isSpeaking ? "animate-pulse" : ""
             }`}
           >
-            <span className="text-primary-foreground font-bold text-4xl">HAU</span>
+            <img
+              src="/logo-circle.png"
+              alt="HAU seal"
+              className="w-28 h-28 rounded-full object-cover"
+            />
             {isSpeaking && (
               <div className="absolute inset-0 rounded-full border-4 border-primary animate-ping opacity-75" />
             )}

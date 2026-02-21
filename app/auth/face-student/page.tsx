@@ -209,10 +209,8 @@ export default function FaceStudentLoginPage() {
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-primary-foreground font-bold">HAU</span>
-            </div>
+            <div className="flex items-center gap-3">
+            <img src="/logo-circle.png" alt="HAU seal" className="w-10 h-10 rounded-full object-cover" />
             <div>
               <h1 className="font-bold text-foreground">Holy Angel University</h1>
               <p className="text-xs text-muted-foreground">Face & Student Number Login</p>

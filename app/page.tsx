@@ -10,9 +10,11 @@ export default function LandingPage() {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">HAU</span>
-            </div>
+            <img
+              src="/logo-circle.png"
+              alt="HAU seal"
+              className="w-12 h-12 rounded-full object-cover"
+            />
             <div>
               <h1 className="text-lg font-bold text-foreground">Holy Angel University</h1>
               <p className="text-sm text-muted-foreground">Registrar Services</p>

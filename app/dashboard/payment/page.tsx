@@ -9,9 +9,28 @@ import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 
+type PendingRequestData = {
+  studentNo?: string
+  documents: Array<{
+    id: string
+    name: string
+    copies: number
+    price: number
+  }>
+  purpose?: string
+  deliveryMethod?: string
+  deliveryDetails?: {
+    pickupDate?: string
+    pickupTime?: string
+    address?: string
+  }
+  paymentMethod?: string
+  total: number
+}
+
 export default function PaymentPage() {
   const router = useRouter()
-  const [requestData, setRequestData] = useState<any>(null)
+  const [requestData, setRequestData] = useState<PendingRequestData | null>(null)
   const [processing, setProcessing] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<"card" | "gcash" | "paymaya" | "cash">("card")
@@ -36,39 +55,61 @@ export default function PaymentPage() {
 
   const handlePayment = async () => {
     setProcessing(true)
-
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-
-    // Generate reference number
-    const refNumber = `REQ-${Date.now()}`
-    const paymentRef = `PAY-${Date.now()}`
-
-    // Store receipt data
-    const receiptData = {
-      ...requestData,
-      referenceNumber: refNumber,
-      paymentReference: paymentRef,
-      paymentMethod:
+    try {
+      const paymentLabel =
         paymentMethod === "card"
           ? "Credit/Debit Card"
           : paymentMethod === "gcash"
             ? "GCash"
             : paymentMethod === "paymaya"
               ? "PayMaya"
-              : "Cash on Pickup",
-      paymentDate: new Date().toISOString(),
-      status: paymentMethod === "cash" ? "Pending Payment" : "Paid",
+              : "Cash on Pickup"
+
+      const response = await fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentNo: requestData?.studentNo,
+          documents: requestData?.documents ?? [],
+          purpose: requestData?.purpose,
+          deliveryMethod: requestData?.deliveryMethod,
+          paymentMethod: paymentLabel,
+          total: requestData?.total,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to submit request.")
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+
+      const refNumber = `REQ-${Date.now()}`
+      const paymentRef = `PAY-${Date.now()}`
+
+      const receiptData = {
+        ...requestData,
+        referenceNumber: refNumber,
+        paymentReference: paymentRef,
+        paymentMethod: paymentLabel,
+        paymentDate: new Date().toISOString(),
+        status: paymentMethod === "cash" ? "Pending Payment" : "Paid",
+      }
+
+      sessionStorage.setItem("receiptData", JSON.stringify(receiptData))
+      sessionStorage.removeItem("pendingRequest")
+
+      if (requestData?.deliveryMethod === "Print at Kiosk" && paymentMethod !== "cash") {
+        sessionStorage.setItem("shouldPrintKiosk", "true")
+      }
+
+      router.push("/dashboard/receipt")
+    } catch (error) {
+      console.error("Payment submit error:", error)
+      setProcessing(false)
     }
-
-    sessionStorage.setItem("receiptData", JSON.stringify(receiptData))
-    sessionStorage.removeItem("pendingRequest")
-
-    if (requestData.deliveryMethod === "Print at Kiosk" && paymentMethod !== "cash") {
-      sessionStorage.setItem("shouldPrintKiosk", "true")
-    }
-
-    router.push("/dashboard/receipt")
   }
 
   const handlePrint = () => {
