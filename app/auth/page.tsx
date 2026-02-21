@@ -27,6 +27,11 @@ export default function AuthPage() {
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold text-foreground mb-4">Choose Authentication Method</h1>
             <p className="text-lg text-muted-foreground">Select how you'd like to verify your identity</p>
+            <div className="mt-6 flex justify-center">
+              <Button size="lg" variant="outline" asChild>
+                <Link href="/auth/register">Create test account</Link>
+              </Button>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">

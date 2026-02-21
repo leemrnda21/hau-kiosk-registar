@@ -6,10 +6,12 @@
 
 generator client {
   provider = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Student {
@@ -18,8 +20,20 @@ model Student {
   email       String       @unique
   firstName   String
   lastName    String
+  passwordHash String
   enrollments Enrollment[]
+  faceEnrollment FaceEnrollment?
   createdAt   DateTime     @default(now())
+}
+
+model FaceEnrollment {
+  id         String   @id @default(cuid())
+  studentId  String   @unique
+  student    Student  @relation(fields: [studentId], references: [id])
+  descriptor Json
+  depthData  Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Course {

@@ -1,184 +1,211 @@
-'use client';
+"use client"
 
-import React, { useRef, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { detectFaceInImage, recognizeFace, loadModels } from '@/lib/facial-recognition-pretrained';
-import { findFaceByStudentId } from '@/lib/mock-face-db';
-import { getStudentByNumber } from '@/lib/mock-students-db';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { ArrowLeft, Camera, CheckCircle, XCircle } from 'lucide-react';
-import Link from 'next/link';
+import React, { useRef, useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { detectFaceInImage, recognizeFace, loadModels } from "@/lib/facial-recognition-pretrained"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { ArrowLeft, Camera, CheckCircle, XCircle } from "lucide-react"
+import Link from "next/link"
 
 declare global {
   interface Window {
-    faceapi: any;
+    faceapi: any
   }
 }
 
 export default function FaceStudentLoginPage() {
-  const router = useRouter();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [studentNumber, setStudentNumber] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(false);
-  const [step, setStep] = useState<'input' | 'capture' | 'verify'>('input');
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [studentNumber, setStudentNumber] = useState("")
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [faceDetected, setFaceDetected] = useState(false)
+  const [step, setStep] = useState<"input" | "capture" | "verify">("input")
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [modelsLoaded, setModelsLoaded] = useState(false)
+  const autoStartRef = useRef(false)
 
   // Load face-api.js and TensorFlow
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
-    script.async = true;
+    const script = document.createElement("script")
+    script.src = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"
+    script.async = true
     script.onload = async () => {
-      const tfScript = document.createElement('script');
-      tfScript.src = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js';
-      tfScript.async = true;
+      const tfScript = document.createElement("script")
+      tfScript.src = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"
+      tfScript.async = true
       tfScript.onload = async () => {
-        const backendScript = document.createElement('script');
-        backendScript.src = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js';
-        backendScript.async = true;
+        const backendScript = document.createElement("script")
+        backendScript.src = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.20.0/dist/tf-backend-webgl.min.js"
+        backendScript.async = true
         backendScript.onload = () => {
-          loadModels().then(() => setModelsLoaded(true));
-        };
-        document.body.appendChild(backendScript);
-      };
-      document.body.appendChild(tfScript);
-    };
-    document.body.appendChild(script);
-  }, []);
+          loadModels().then(() => setModelsLoaded(true))
+        }
+        document.body.appendChild(backendScript)
+      }
+      document.body.appendChild(tfScript)
+    }
+    document.body.appendChild(script)
+  }, [])
 
   // Start camera when step is 'capture'
   useEffect(() => {
-    if (step !== 'capture') return;
+    if (step !== "capture") return
 
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user' },
-        });
+          video: { facingMode: "user" },
+        })
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          setIsStreaming(true);
+          videoRef.current.srcObject = stream
+          setIsStreaming(true)
         }
       } catch (error) {
-        console.error('Camera access denied:', error);
-        setResult({ success: false, message: 'Please allow camera access.' });
+        console.error("Camera access denied:", error)
+        setResult({ success: false, message: "Please allow camera access." })
       }
-    };
+    }
 
-    startCamera();
+    startCamera()
 
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach(track => track.stop());
+        const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
+        tracks.forEach((track) => track.stop())
       }
-    };
-  }, [step]);
+    }
+  }, [step])
 
-  const handleStartCapture = async () => {
-    if (!studentNumber.trim()) {
-      setResult({ success: false, message: 'Please enter a student number.' });
-      return;
+  const handleStartCapture = async (overrideStudentNumber?: string) => {
+    const value = overrideStudentNumber ?? studentNumber
+    if (!value.trim()) {
+      setResult({ success: false, message: "Please enter a student number." })
+      return
     }
 
-    // Verify student exists in database
-    const student = getStudentByNumber(studentNumber);
-    if (!student) {
-      setResult({ success: false, message: 'Student number not found in database.' });
-      return;
+    let data = null
+    try {
+      const response = await fetch(`/api/face-enrollment?studentNo=${encodeURIComponent(value)}`)
+      data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setResult({ success: false, message: data.message || "Student number not found in database." })
+        return
+      }
+    } catch (error) {
+      setResult({ success: false, message: "Unable to reach enrollment service. Please try again." })
+      return
     }
 
-    // Verify student has enrolled face
-    const faceRecord = findFaceByStudentId(studentNumber);
-    if (!faceRecord) {
-      setResult({ success: false, message: 'No face enrollment found for this student. Please enroll first.' });
-      return;
+    if (!data.enrolled) {
+      setResult({ success: false, message: "No face enrollment found for this student. Please enroll first." })
+      return
     }
 
-    setStep('capture');
-    setResult(null);
-  };
+    setStep("capture")
+    setResult(null)
+  }
+
+  const handleStartCaptureClick = () => {
+    handleStartCapture().catch(() => undefined)
+  }
+
+  useEffect(() => {
+    const studentNoParam = searchParams.get("studentNo")
+    if (!studentNoParam || autoStartRef.current) return
+
+    autoStartRef.current = true
+    setStudentNumber(studentNoParam)
+    handleStartCapture(studentNoParam)
+  }, [searchParams])
 
   const captureAndVerify = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) return
 
-    setIsProcessing(true);
+    setIsProcessing(true)
     try {
-      const context = canvasRef.current.getContext('2d');
-      if (!context) return;
+      const context = canvasRef.current.getContext("2d")
+      if (!context) return
 
-      canvasRef.current.width = videoRef.current.videoWidth;
-      canvasRef.current.height = videoRef.current.videoHeight;
-      context.drawImage(videoRef.current, 0, 0);
+      canvasRef.current.width = videoRef.current.videoWidth
+      canvasRef.current.height = videoRef.current.videoHeight
+      context.drawImage(videoRef.current, 0, 0)
 
       if (window.faceapi) {
         // Recognize face and verify against database
-        const recognition = await recognizeFace(canvasRef.current);
-        
+        const recognition = await recognizeFace(canvasRef.current, studentNumber)
+
+        if (!recognition.verified && recognition.message.includes("Models are still loading")) {
+          setFaceDetected(false)
+          setResult({
+            success: false,
+            message: recognition.message
+          })
+          return
+        }
+
         // For login, verify that:
         // 1. A face is detected and verified in the database
         // 2. The recognized student matches the entered student number
         if (recognition.verified && recognition.studentId === studentNumber) {
-          setStep('verify');
-          setFaceDetected(true);
-          const student = getStudentByNumber(studentNumber);
-          
-          if (student) {
-            // Store user info in sessionStorage (including email)
-            sessionStorage.setItem('currentUser', JSON.stringify({
-              studentNumber: student.studentNumber,
-              fullName: student.fullName,
-              email: student.email,
-            }));
-
-            setResult({ 
-              success: true, 
-              message: `Face verified! Welcome, ${student.fullName}. Redirecting...` 
-            });
-
-            // Redirect to dashboard after 2 seconds
-            setTimeout(() => {
-              router.push('/dashboard');
-            }, 2000);
+          setStep("verify")
+          setFaceDetected(true)
+          if (recognition.name && recognition.email) {
+            sessionStorage.setItem(
+              "currentUser",
+              JSON.stringify({
+                studentNumber: recognition.studentId,
+                fullName: recognition.name,
+                email: recognition.email,
+              })
+            )
           }
+          setResult({
+            success: true,
+            message: "Face verified! Redirecting..."
+          })
+
+          // Redirect to dashboard after 2 seconds
+          setTimeout(() => {
+            router.push("/dashboard")
+          }, 2000)
         } else if (!recognition.verified) {
-          setFaceDetected(false);
-          setResult({ 
-            success: false, 
-            message: `Face not recognized or not found in database. ${recognition.message}` 
-          });
+          setFaceDetected(false)
+          setResult({
+            success: false,
+            message: `Face not recognized or not found in database. ${recognition.message}`
+          })
         } else if (recognition.studentId !== studentNumber) {
-          setFaceDetected(false);
-          setResult({ 
-            success: false, 
-            message: `Face belongs to a different student (${recognition.studentId}). Please try again.` 
-          });
+          setFaceDetected(false)
+          setResult({
+            success: false,
+            message: `Face belongs to a different student (${recognition.studentId}). Please try again.`
+          })
         }
       }
     } catch (error) {
-      console.error('Verification error:', error);
-      setResult({ success: false, message: 'Error during face verification. Please try again.' });
+      console.error("Verification error:", error)
+      setResult({ success: false, message: "Error during face verification. Please try again." })
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
+  }
 
   const handleBackToInput = () => {
-    setStep('input');
-    setStudentNumber('');
-    setResult(null);
-    setFaceDetected(false);
-  };
+    setStep("input")
+    setStudentNumber("")
+    setResult(null)
+    setFaceDetected(false)
+  }
 
-  return (
-    <div className="min-h-screen bg-background">
+    return (
+      <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4">
@@ -223,7 +250,7 @@ export default function FaceStudentLoginPage() {
                     placeholder="e.g., 20876916"
                     value={studentNumber}
                     onChange={(e) => setStudentNumber(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleStartCapture()}
+                    onKeyPress={(e) => e.key === "Enter" && handleStartCaptureClick()}
                   />
                 </div>
 
@@ -235,7 +262,7 @@ export default function FaceStudentLoginPage() {
                   </div>
                 )}
 
-                <Button onClick={handleStartCapture} className="w-full" size="lg">
+                <Button onClick={handleStartCaptureClick} className="w-full" size="lg">
                   Continue to Face Capture
                 </Button>
               </div>
@@ -277,13 +304,13 @@ export default function FaceStudentLoginPage() {
                   >
                     Back
                   </Button>
-                  <Button
-                    onClick={captureAndVerify}
-                    disabled={isProcessing || !modelsLoaded}
-                    className="flex-1"
-                  >
-                    {isProcessing ? 'Verifying...' : 'Capture & Verify'}
-                  </Button>
+          <Button
+            onClick={captureAndVerify}
+            disabled={isProcessing || !modelsLoaded}
+            className="flex-1"
+          >
+            {!modelsLoaded ? "Loading models..." : isProcessing ? "Verifying..." : "Capture & Verify"}
+          </Button>
                 </div>
 
                 {result && (

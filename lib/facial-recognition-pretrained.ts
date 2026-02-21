@@ -2,8 +2,6 @@
 // Detects faces, extracts descriptors, and verifies against database
 // Includes 3D depth detection for liveness verification and anti-spoofing
 
-import { findFaceByDescriptor, verifyFaceWithDepth } from '@/lib/mock-face-db';
-
 let modelsLoaded = false;
 
 export async function loadModels() {
@@ -23,7 +21,6 @@ export async function loadModels() {
       (window as any).faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
       (window as any).faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
       (window as any).faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-      (window as any).faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
     ]);
     
     await Promise.race([loadPromise, loadTimeout]);
@@ -45,7 +42,6 @@ export async function loadModels() {
         (window as any).faceapi.nets.tinyFaceDetector.loadFromUri(ALT_MODEL_URL),
         (window as any).faceapi.nets.faceLandmark68Net.loadFromUri(ALT_MODEL_URL),
         (window as any).faceapi.nets.faceRecognitionNet.loadFromUri(ALT_MODEL_URL),
-        (window as any).faceapi.nets.faceExpressionNet.loadFromUri(ALT_MODEL_URL),
       ]);
       
       await Promise.race([altLoadPromise, loadTimeout]);
@@ -67,7 +63,6 @@ export async function loadModels() {
           (window as any).faceapi.nets.tinyFaceDetector.loadFromUri(UNPKG_URL),
           (window as any).faceapi.nets.faceLandmark68Net.loadFromUri(UNPKG_URL),
           (window as any).faceapi.nets.faceRecognitionNet.loadFromUri(UNPKG_URL),
-          (window as any).faceapi.nets.faceExpressionNet.loadFromUri(UNPKG_URL),
         ]);
         
         await Promise.race([unpkgPromise, loadTimeout]);
@@ -81,18 +76,27 @@ export async function loadModels() {
   }
 }
 
-export async function detectFaceInImage(imageElement: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement) {
+export type FaceDetectionResult = {
+  status: "ok" | "models-not-ready"
+  detections: any[]
+}
+
+export async function detectFaceInImage(
+  imageElement: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement
+): Promise<FaceDetectionResult> {
   try {
     await loadModels();
     
     if (!window.faceapi) {
-      console.error('face-api not available');
-      return [];
+      return { status: "models-not-ready", detections: [] };
     }
 
     if (!window.faceapi.nets || !window.faceapi.nets.tinyFaceDetector) {
-      console.error('Face detector models not loaded');
-      return [];
+      return { status: "models-not-ready", detections: [] };
+    }
+
+    if (!window.faceapi.nets.tinyFaceDetector.params) {
+      return { status: "models-not-ready", detections: [] };
     }
 
     console.log('Starting face detection...');
@@ -103,10 +107,10 @@ export async function detectFaceInImage(imageElement: HTMLImageElement | HTMLCan
       .withFaceDescriptors();
     
     console.log(`Face detection complete. Found ${detections.length} face(s)`);
-    return detections;
+    return { status: "ok", detections };
   } catch (error) {
     console.error('Error detecting faces:', error);
-    return [];
+    return { status: "ok", detections: [] };
   }
 }
 
@@ -161,21 +165,29 @@ export function calculate3DDepth(landmarks: any): { minDepth: number; maxDepth: 
   return { minDepth, maxDepth };
 }
 
-export async function recognizeFace(imageElement: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement): Promise<{ verified: boolean; message: string; studentId?: string }> {
+export async function recognizeFace(
+  imageElement: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement,
+  studentNo?: string
+): Promise<{ verified: boolean; message: string; studentId?: string; name?: string; email?: string; distance?: number }> {
   try {
-    const detections = await detectFaceInImage(imageElement);
-    
-    console.log('Recognition - detections:', detections.length);
-    
-    if (!detections || detections.length === 0) {
-      return { verified: false, message: 'No face detected in the image' };
+    const result = await detectFaceInImage(imageElement)
+    const detections = result.detections
+
+    if (result.status === "models-not-ready") {
+      return { verified: false, message: "Models are still loading. Please wait a moment and try again." }
+    }
+
+    console.log('Recognition - detections:', detections.length)
+
+    if (detections.length === 0) {
+      return { verified: false, message: 'No face detected in the image' }
     }
 
     if (detections.length > 1) {
-      return { verified: false, message: 'Multiple faces detected. Please ensure only one person is in the frame.' };
+      return { verified: false, message: 'Multiple faces detected. Please ensure only one person is in the frame.' }
     }
 
-    const detection = detections[0];
+    const detection = detections[0]
     console.log('Detection object keys:', Object.keys(detection));
     console.log('Has descriptor:', !!detection.descriptor);
     
@@ -196,8 +208,17 @@ export async function recognizeFace(imageElement: HTMLImageElement | HTMLCanvasE
     // Calculate 3D depth for liveness and anti-spoofing detection
     const depthData = calculate3DDepth(landmarks);
 
-    // Verify face against database with 3D depth check
-    const verificationResult = verifyFaceWithDepth(faceDescriptor, depthData);
+    const response = await fetch("/api/face-recognition", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ descriptor: faceDescriptor, depthData, studentNo }),
+    });
+
+    if (!response.ok) {
+      return { verified: false, message: "Face verification service unavailable." };
+    }
+
+    const verificationResult = await response.json();
 
     console.log('Verification result:', verificationResult);
 
@@ -206,9 +227,16 @@ export async function recognizeFace(imageElement: HTMLImageElement | HTMLCanvasE
         verified: true,
         message: `✓ Identity Verified: ${verificationResult.record.name} (Student ID: ${verificationResult.record.studentId}) - 3D Depth Confirmed`,
         studentId: verificationResult.record.studentId,
+        name: verificationResult.record.name,
+        email: verificationResult.record.email,
+        distance: verificationResult.distance,
       };
     } else {
-      return { verified: false, message: `✗ Verification Failed: ${verificationResult.reason}` };
+      return {
+        verified: false,
+        message: `✗ Verification Failed: ${verificationResult.reason}`,
+        distance: verificationResult.distance,
+      };
     }
   } catch (error) {
     console.error('Error in face recognition:', error);

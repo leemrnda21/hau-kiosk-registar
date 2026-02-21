@@ -11,6 +11,7 @@ type ConversationStep =
   | "welcome"
   | "auth-choice"
   | "email-input"
+  | "email-confirm"
   | "password-input"
   | "student-number"
   | "student-number-confirm"
@@ -31,9 +32,12 @@ export default function VoiceModePage() {
   const [conversation, setConversation] = useState<Array<{ speaker: "bot" | "user"; text: string }>>([])
   const [step, setStep] = useState<ConversationStep>("welcome")
   const [pendingStudentNumber, setPendingStudentNumber] = useState<string>("")
+  const [pendingEmail, setPendingEmail] = useState<string>("")
   const [isMuted, setIsMuted] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
   const recognitionRef = useRef<any>(null)
   const synthRef = useRef<SpeechSynthesis | null>(null)
+  const handleUserSpeechRef = useRef<(text: string) => void>(() => undefined)
   const autoListenRef = useRef(true)
   const receivedResultRef = useRef(false)
   const sessionActiveRef = useRef(false)
@@ -41,6 +45,35 @@ export default function VoiceModePage() {
   const retryTimeoutRef = useRef<number | null>(null)
   const listenStartRef = useRef<number | null>(null)
   const maxListenMs = 8000
+
+  const normalizeEmailFromSpeech = (spoken: string) => {
+    const base = spoken
+      .toLowerCase()
+      .replace(/\bemail\b/g, " ")
+      .replace(/\baddress\b/g, " ")
+      .replace(/\bstudent\b/g, " ")
+      .replace(/\b(at)\b/g, "@")
+      .replace(/\b(dot)\b/g, ".")
+      .replace(/\b(underscore)\b/g, "_")
+      .replace(/\b(dash|hyphen)\b/g, "-")
+      .replace(/\s+/g, "")
+      .replace(/[^a-z0-9@._-]/g, "")
+
+    if (!base) return ""
+
+    const username = base.includes("@") ? base.split("@")[0] : base
+    const cleanedUser = username.replace(/[^a-z0-9._-]/g, "")
+    if (!cleanedUser) return ""
+    return `${cleanedUser}@student.hau.edu.ph`
+  }
+
+  const formatEmailForSpeech = (email: string) => {
+    return email
+      .replace(/@/g, " at ")
+      .replace(/\./g, " dot ")
+      .replace(/_/g, " underscore ")
+      .replace(/-/g, " dash ")
+  }
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -75,19 +108,19 @@ export default function VoiceModePage() {
           receivedResultRef.current = true
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             const transcriptText = event.results[i][0].transcript
-            if (event.results[i].isFinal) {
-              setTranscript("")
-              setStatusMessage("")
-              sessionActiveRef.current = false
-              try {
-                recognitionRef.current?.stop()
-              } catch (error) {
-                // ignore
+              if (event.results[i].isFinal) {
+                setTranscript("")
+                setStatusMessage("")
+                sessionActiveRef.current = false
+                try {
+                  recognitionRef.current?.stop()
+                } catch (error) {
+                  // ignore
+                }
+                handleUserSpeechRef.current(transcriptText)
+              } else {
+                setTranscript(transcriptText)
               }
-              handleUserSpeech(transcriptText)
-            } else {
-              setTranscript(transcriptText)
-            }
           }
         }
 
@@ -189,7 +222,15 @@ export default function VoiceModePage() {
   }
 
   const speak = (text: string) => {
-    if (!synthRef.current || isMuted) return
+    setConversation((prev) => [...prev, { speaker: "bot", text }])
+
+    if (!synthRef.current || isMuted) {
+      setIsSpeaking(false)
+      if (autoListenRef.current) {
+        startListening().catch(() => undefined)
+      }
+      return
+    }
 
     stopListening()
     setStatusMessage("")
@@ -208,60 +249,123 @@ export default function VoiceModePage() {
     }
 
     synthRef.current.speak(utterance)
-    setConversation((prev) => [...prev, { speaker: "bot", text }])
   }
 
-  const handleUserSpeech = (text: string) => {
+  const handleUserSpeech = async (text: string) => {
     setConversation((prev) => [...prev, { speaker: "user", text }])
     setTranscript("")
 
     const lowerText = text.toLowerCase()
+    const activeStep = step
 
-    switch (step) {
+    switch (activeStep) {
       case "welcome":
       case "auth-choice": {
+        const commandText = lowerText.replace(/[^a-z]/g, "")
         if (lowerText.includes("hello") || lowerText.includes("hi") || lowerText.includes("hey")) {
           speak("Hello! You can say email, face recognition, or both.")
-        } else if (lowerText.includes("email") && !lowerText.includes("face")) {
+        } else if (commandText.includes("email") && !commandText.includes("face")) {
           setStep("email-input")
-          speak("Great! Please say your school email address clearly.")
-        } else if (lowerText.includes("face") || lowerText.includes("recognition")) {
+          speak("Great! Please say your email username, like vbmiranda.")
+        } else if (commandText.includes("face") || lowerText.includes("recognition")) {
           setStep("student-number")
           speak("Perfect! Please say your student number clearly.")
-        } else if (lowerText.includes("both") || lowerText.includes("combined")) {
+        } else if (commandText.includes("both") || lowerText.includes("combined")) {
           setStep("email-input")
-          speak("Excellent choice. Let's start with your email address.")
+          speak("Excellent choice. Let's start with your email username, like vbmiranda.")
         } else {
           speak("I didn't catch that. Please say email, face recognition, or both.")
         }
         break
       }
 
-      case "email-input":
-        speak(`I heard ${text}. Is that correct? Say yes to continue or no to try again.`)
-        setStep("password-input")
-        break
+      case "email-input": {
+        const normalizedEmail = normalizeEmailFromSpeech(text)
+        if (!normalizedEmail) {
+          speak("I didn't catch that. Please say your email username, like vbmiranda.")
+          break
+        }
 
-      case "password-input":
+        setPendingEmail(normalizedEmail)
+        speak(`I heard ${formatEmailForSpeech(normalizedEmail)}. Is that correct? Say yes to continue or no to try again.`)
+        setStep("email-confirm")
+        break
+      }
+
+      case "email-confirm":
         if (lowerText.includes("yes")) {
+          setStep("password-input")
           speak("Thank you. Now please say your password.")
         } else if (lowerText.includes("no")) {
+          setPendingEmail("")
           setStep("email-input")
-          speak("Okay, let's try again. Please say your school email address clearly.")
+          speak("Okay, let's try again. Please say your email username clearly.")
         } else {
-          setStep("authenticated")
-          speak("Authentication successful! Welcome. Redirecting to your dashboard.")
-          setTimeout(() => {
-            sessionStorage.setItem("authenticated", "true")
-            router.push("/dashboard")
-          }, 3000)
+          speak("Please say yes to confirm your email or no to try again.")
         }
         break
 
+      case "password-input":
+        if (!text.trim()) {
+          speak("I didn't catch that. Please say your password.")
+          break
+        }
+
+        if (!pendingEmail) {
+          setStep("email-input")
+          speak("I need your email first. Please say your email username.")
+          break
+        }
+
+        const spokenPassword = text.replace(/\s+/g, "")
+        setStatusMessage("Verifying credentials...")
+        setIsVerifying(true)
+        try {
+          const response = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: pendingEmail, password: spokenPassword }),
+          })
+
+          const data = await response.json()
+          if (!response.ok || !data.success) {
+            setIsVerifying(false)
+            setStatusMessage("")
+            speak(data.message || "Incorrect password. Please try again.")
+            setStep("password-input")
+            break
+          }
+
+          sessionStorage.setItem("authenticated", "true")
+          sessionStorage.setItem(
+            "currentUser",
+            JSON.stringify({
+              studentNumber: data.student.studentNo,
+              fullName: `${data.student.firstName} ${data.student.lastName}`,
+              email: data.student.email,
+            })
+          )
+
+          setStep("authenticated")
+          setIsVerifying(false)
+          speak("Authentication successful! Welcome. Redirecting to your dashboard.")
+          setTimeout(() => {
+            router.push("/dashboard")
+          }, 2000)
+        } catch (error) {
+          setIsVerifying(false)
+          setStatusMessage("")
+          speak("Login failed. Please try again.")
+          setStep("password-input")
+        }
+        break
+
+
       case "student-number":
         if (text.trim()) {
-          setPendingStudentNumber(text.trim())
-          speak(`I heard ${text}. Is that correct? Say yes to continue or no to try again.`)
+          const normalizedStudentNumber = text.replace(/\s+/g, "")
+          setPendingStudentNumber(normalizedStudentNumber)
+          speak(`I heard ${normalizedStudentNumber}. Is that correct? Say yes to continue or no to try again.`)
           setStep("student-number-confirm")
         } else {
           speak("I didn't catch that. Please say your student number clearly.")
@@ -271,9 +375,10 @@ export default function VoiceModePage() {
       case "student-number-confirm":
         if (lowerText.includes("yes")) {
           setStep("face-verify")
-          speak(
-            "Perfect! Now I need to verify your face. Please look at the camera and make sure your face is well-lit. Blink when you're ready.",
-          )
+          speak("Great. Redirecting you to face verification now.")
+          setTimeout(() => {
+            router.push(`/auth/face-student?studentNo=${encodeURIComponent(pendingStudentNumber)}`)
+          }, 800)
         } else if (lowerText.includes("no")) {
           setPendingStudentNumber("")
           setStep("student-number")
@@ -284,27 +389,17 @@ export default function VoiceModePage() {
         break
 
       case "face-verify":
-        if (lowerText.includes("yes")) {
-          speak(
-            "Perfect! Now I need to verify your face. Please look at the camera and make sure your face is well-lit. Blink when you're ready.",
-          )
-          setTimeout(() => {
-            setStep("authenticated")
-            speak("Face verified! Welcome. Redirecting to your dashboard.")
-            setTimeout(() => {
-              sessionStorage.setItem("authenticated", "true")
-              router.push("/dashboard")
-            }, 3000)
-          }, 3000)
-        } else if (lowerText.includes("no")) {
+        if (lowerText.includes("no")) {
           speak("Let's try again. Please say your student number clearly.")
           setStep("student-number")
         } else {
-          speak("Please say 'yes' to confirm or 'no' to retry.")
+          speak("Please say 'yes' to continue or 'no' to retry.")
         }
         break
     }
   }
+
+  handleUserSpeechRef.current = handleUserSpeech
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
@@ -409,13 +504,14 @@ export default function VoiceModePage() {
           </div>
         </Card>
 
-        {(transcript || statusMessage) && (
+        {(transcript || statusMessage || isVerifying) && (
           <Card className="p-4 mb-6 bg-accent">
             <p className="text-sm text-muted-foreground mb-1">
               {isListening ? "Listening..." : "Ready"}
             </p>
             {transcript ? <p className="text-foreground">{transcript}</p> : null}
             {statusMessage ? <p className="text-foreground">{statusMessage}</p> : null}
+            {isVerifying ? <p className="text-foreground">Checking credentials...</p> : null}
           </Card>
         )}
 

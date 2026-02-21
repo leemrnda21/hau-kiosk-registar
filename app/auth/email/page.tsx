@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { verifyCredentials } from "@/lib/mock-students-db"
 
 export default function EmailLoginPage() {
   const router = useRouter()
@@ -25,24 +24,38 @@ export default function EmailLoginPage() {
     setIsLoading(true)
     setError("")
 
-    // Verify credentials
-    const student = verifyCredentials(email, password)
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
 
-    if (student) {
-      // Store student info in sessionStorage
-      sessionStorage.setItem('currentUser', JSON.stringify({
-        studentNumber: student.studentNumber,
-        fullName: student.fullName,
-        email: student.email,
-      }))
-      
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setIsLoading(false)
+        setError(data.message || "Invalid email or password")
+        return
+      }
+
+      sessionStorage.setItem(
+        "currentUser",
+        JSON.stringify({
+          studentNumber: data.student.studentNo,
+          fullName: `${data.student.firstName} ${data.student.lastName}`,
+          email: data.student.email,
+        })
+      )
+
       setTimeout(() => {
         setIsLoading(false)
         router.push("/dashboard")
-      }, 1500)
-    } else {
+      }, 800)
+    } catch (error) {
+      console.error("Login error:", error)
       setIsLoading(false)
-      setError("Invalid email or password")
+      setError("Login failed. Please try again.")
     }
   }
 
