@@ -8,7 +8,7 @@ export type DocumentType =
   | "Certificate of Transfer Credential"
   | "Certificate of Graduation"
 
-export type DocumentStatus = "ready" | "processing" | "pending"
+export type DocumentStatus = "ready" | "processing" | "pending" | "submitted" | "rejected"
 
 export interface DemoDocument {
   id: string

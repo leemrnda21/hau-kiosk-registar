@@ -41,6 +41,47 @@ export async function POST(request: Request) {
       );
     }
 
+    if (student.status?.toLowerCase() !== "active") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Your account is pending approval. Please wait for admin activation.",
+          approvalPending: true,
+          student: {
+            id: student.id,
+            studentNo: student.studentNo,
+            firstName: student.firstName,
+            lastName: student.lastName,
+            email: student.email,
+          },
+        },
+        { status: 403 }
+      );
+    }
+
+    const enrollment = await prisma.faceEnrollment.findUnique({
+      where: { studentId: student.id },
+      select: { id: true },
+    })
+
+    if (!enrollment) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Face enrollment required before login.",
+          enrollmentRequired: true,
+          student: {
+            id: student.id,
+            studentNo: student.studentNo,
+            firstName: student.firstName,
+            lastName: student.lastName,
+            email: student.email,
+          },
+        },
+        { status: 403 }
+      )
+    }
+
     return NextResponse.json({
       success: true,
       student: {

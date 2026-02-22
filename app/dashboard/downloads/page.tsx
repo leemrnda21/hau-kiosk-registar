@@ -66,6 +66,38 @@ export default function DownloadsPage() {
     loadDocuments()
   }, [currentUser])
 
+  useEffect(() => {
+    if (!currentUser?.studentNumber) {
+      return
+    }
+
+    const eventSource = new EventSource("/api/events")
+    const handleUpdate = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data)
+        if (payload?.studentNo && payload.studentNo !== currentUser.studentNumber) {
+          return
+        }
+        fetch(`/api/documents?studentNo=${encodeURIComponent(currentUser.studentNumber)}`)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.success) {
+              setDocuments(data.requests || [])
+            }
+          })
+      } catch (error) {
+        console.error("Event update parse error:", error)
+      }
+    }
+
+    eventSource.addEventListener("request-updated", handleUpdate)
+    eventSource.addEventListener("request-created", handleUpdate)
+
+    return () => {
+      eventSource.close()
+    }
+  }, [currentUser])
+
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {
       const matchesStatus = statusFilter === "all" || doc.status === statusFilter
@@ -279,7 +311,9 @@ export default function DownloadsPage() {
                               ? "bg-green-500/10 text-green-700"
                               : doc.status === "processing"
                                 ? "bg-blue-500/10 text-blue-700"
-                                : "bg-yellow-500/10 text-yellow-700"
+                                : doc.status === "rejected"
+                                  ? "bg-rose-500/10 text-rose-700"
+                                  : "bg-yellow-500/10 text-yellow-700"
                           }`}
                         >
                           {doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}

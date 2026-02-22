@@ -54,6 +54,47 @@ export default function TrackPage() {
     loadRequests()
   }, [searchRef])
 
+  useEffect(() => {
+    const userString = sessionStorage.getItem("currentUser")
+    const currentUser = userString ? JSON.parse(userString) : null
+    if (!currentUser?.studentNumber) {
+      return
+    }
+
+    const eventSource = new EventSource("/api/events")
+    const handleUpdate = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data)
+        if (payload?.studentNo && payload.studentNo !== currentUser.studentNumber) {
+          return
+        }
+        setLoading(true)
+        const url = new URL("/api/dashboard/requests", window.location.origin)
+        url.searchParams.set("studentNo", currentUser.studentNumber)
+        if (searchRef) {
+          url.searchParams.set("referenceNo", searchRef)
+        }
+        fetch(url)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.success) {
+              setRequests(data.requests || [])
+            }
+          })
+          .finally(() => setLoading(false))
+      } catch (error) {
+        console.error("Event update parse error:", error)
+      }
+    }
+
+    eventSource.addEventListener("request-updated", handleUpdate)
+    eventSource.addEventListener("request-created", handleUpdate)
+
+    return () => {
+      eventSource.close()
+    }
+  }, [searchRef])
+
   const formatDocumentType = (value: string) => {
     return value
       .split("_")
@@ -99,6 +140,10 @@ export default function TrackPage() {
         { step: "Processing", completed: true, date: "Complete" },
         { step: "Ready", completed: true, date: "Complete" },
       ],
+      rejected: [
+        { step: "Submitted", completed: true, date: "Complete" },
+        { step: "Rejected", completed: true, date: "Complete" },
+      ],
     } as const
   }, [])
 
@@ -110,6 +155,8 @@ export default function TrackPage() {
         return <CheckCircle2 className="w-5 h-5 text-green-500" />
       case "submitted":
         return <Truck className="w-5 h-5 text-blue-500" />
+      case "rejected":
+        return <Package className="w-5 h-5 text-rose-500" />
       default:
         return <Package className="w-5 h-5 text-muted-foreground" />
     }
@@ -123,6 +170,8 @@ export default function TrackPage() {
         return "bg-green-500/10 text-green-700"
       case "submitted":
         return "bg-blue-500/10 text-blue-700"
+      case "rejected":
+        return "bg-rose-500/10 text-rose-700"
       default:
         return "bg-muted text-muted-foreground"
     }

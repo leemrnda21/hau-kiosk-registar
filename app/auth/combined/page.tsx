@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Mail, Lock, User, Camera, CheckCircle2 } from "lucide-react"
@@ -18,22 +18,104 @@ export default function CombinedAuthPage() {
   const [password, setPassword] = useState("")
   const [studentNumber, setStudentNumber] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleStep1Submit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingFaceEnrollment")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+      if (parsed?.studentNo) {
+        const params = new URLSearchParams({
+          studentNo: parsed.studentNo,
+          email: parsed.email || "",
+          name: parsed.name || "",
+        })
+        router.replace(`/face-enrollment?${params.toString()}`)
+      }
+    } catch (error) {
+      console.error("Pending enrollment parse error:", error)
+    }
+  }, [router])
+
+  const handleStep1Submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setStep(2)
+    setError("")
+    setIsLoading(true)
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        if (data?.approvalPending && data?.student) {
+          sessionStorage.setItem(
+            "pendingStudentApproval",
+            JSON.stringify({
+              studentNo: data.student.studentNo,
+              email: data.student.email,
+              name: `${data.student.firstName} ${data.student.lastName}`,
+            })
+          )
+          router.push("/auth?pending=approval")
+          return
+        }
+        setError(data.message || "Invalid email or password")
+        return
+      }
+
+      sessionStorage.setItem(
+        "currentUser",
+        JSON.stringify({
+          studentNumber: data.student.studentNo,
+          fullName: `${data.student.firstName} ${data.student.lastName}`,
+          email: data.student.email,
+        })
+      )
+      setStep(2)
+    } catch (error) {
+      console.error("Combined login error:", error)
+      setError("Login failed. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleStep2Submit = (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
     setStep(3)
   }
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     setIsLoading(true)
-    setTimeout(() => {
+    try {
+      const response = await fetch(`/api/profile?studentNo=${encodeURIComponent(studentNumber)}`)
+      const data = await response.json()
+      if (!response.ok || !data.success || data.student?.status !== "Active") {
+        setError("Your account is pending approval. Please wait for admin activation.")
+        sessionStorage.setItem(
+          "pendingStudentApproval",
+          JSON.stringify({
+            studentNo: studentNumber,
+            email,
+            name: data?.student ? `${data.student.firstName} ${data.student.lastName}` : "",
+          })
+        )
+        return
+      }
       router.push("/dashboard")
-    }, 2000)
+    } catch (error) {
+      console.error("Approval check error:", error)
+      setError("Unable to verify account status.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -83,6 +165,11 @@ export default function CombinedAuthPage() {
           {/* Step 1: Email & Password */}
           {step === 1 && (
             <form onSubmit={handleStep1Submit} className="space-y-6">
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500 rounded-lg">
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email">School Email</Label>
                 <div className="relative">
@@ -114,7 +201,7 @@ export default function CombinedAuthPage() {
                 </div>
               </div>
               <Button type="submit" className="w-full" size="lg">
-                Continue to Step 2
+                {isLoading ? "Verifying..." : "Continue to Step 2"}
               </Button>
             </form>
           )}
@@ -122,6 +209,11 @@ export default function CombinedAuthPage() {
           {/* Step 2: Student Number */}
           {step === 2 && (
             <form onSubmit={handleStep2Submit} className="space-y-6">
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500 rounded-lg">
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="studentNumber">Student Number</Label>
                 <div className="relative">
@@ -146,6 +238,11 @@ export default function CombinedAuthPage() {
           {/* Step 3: Face Verification */}
           {step === 3 && (
             <div className="space-y-6">
+              {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500 rounded-lg">
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
               <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
                 <Camera className="w-16 h-16 text-muted-foreground" />
               </div>

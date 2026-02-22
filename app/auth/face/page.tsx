@@ -20,6 +20,26 @@ export default function FaceRecognitionPage() {
   const [faceDetected, setFaceDetected] = useState(false)
 
   useEffect(() => {
+    const stored = sessionStorage.getItem("pendingFaceEnrollment")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+      if (parsed?.studentNo) {
+        const params = new URLSearchParams({
+          studentNo: parsed.studentNo,
+          email: parsed.email || "",
+          name: parsed.name || "",
+        })
+        router.replace(`/face-enrollment?${params.toString()}`)
+      }
+    } catch (error) {
+      console.error("Pending enrollment parse error:", error)
+    }
+  }, [router])
+
+  useEffect(() => {
     if (step === "camera") {
       startCamera()
     }

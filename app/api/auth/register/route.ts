@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { broadcastEvent } from "@/lib/sse-broker";
 
 export const runtime = "nodejs";
 
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
         yearLevel,
         email,
         passwordHash,
+        status: "Pending",
       },
       select: {
         id: true,
@@ -67,12 +69,18 @@ export async function POST(request: Request) {
         course: true,
         yearLevel: true,
         email: true,
+        status: true,
       },
+    });
+
+    broadcastEvent({
+      type: "student-created",
+      data: { studentNo: student.studentNo, status: student.status },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Account created. Continue to facial enrollment.",
+      message: "Account created. Await admin approval to continue.",
       student,
     });
   } catch (error) {

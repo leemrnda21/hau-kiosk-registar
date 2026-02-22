@@ -331,6 +331,19 @@ export default function VoiceModePage() {
           if (!response.ok || !data.success) {
             setIsVerifying(false)
             setStatusMessage("")
+            if (data?.approvalPending && data?.student) {
+              sessionStorage.setItem(
+                "pendingStudentApproval",
+                JSON.stringify({
+                  studentNo: data.student.studentNo,
+                  email: data.student.email,
+                  name: `${data.student.firstName} ${data.student.lastName}`,
+                })
+              )
+              speak("Your account is pending approval. Please wait for admin activation.")
+              setStep("welcome")
+              break
+            }
             speak(data.message || "Incorrect password. Please try again.")
             setStep("password-input")
             break

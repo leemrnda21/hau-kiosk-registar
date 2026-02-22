@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Mail, Lock, Eye, EyeOff } from "lucide-react"
@@ -18,6 +18,11 @@ export default function EmailLoginPage() {
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [pendingEnrollment, setPendingEnrollment] = useState<{
+    studentNo: string
+    email: string
+    name: string
+  } | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,6 +40,36 @@ export default function EmailLoginPage() {
 
       if (!response.ok || !data.success) {
         setIsLoading(false)
+        if (data?.approvalPending && data?.student) {
+          const fullName = `${data.student.firstName} ${data.student.lastName}`
+          sessionStorage.setItem(
+            "pendingStudentApproval",
+            JSON.stringify({
+              studentNo: data.student.studentNo,
+              email: data.student.email,
+              name: fullName,
+            })
+          )
+          router.push("/auth?pending=approval")
+          return
+        }
+        if (data?.enrollmentRequired && data?.student) {
+          const fullName = `${data.student.firstName} ${data.student.lastName}`
+          const pending = {
+            studentNo: data.student.studentNo,
+            email: data.student.email,
+            name: fullName,
+          }
+          sessionStorage.setItem("pendingFaceEnrollment", JSON.stringify(pending))
+          router.push(
+            `/face-enrollment?${new URLSearchParams({
+              studentNo: pending.studentNo,
+              email: pending.email,
+              name: pending.name,
+            }).toString()}`
+          )
+          return
+        }
         setError(data.message || "Invalid email or password")
         return
       }
@@ -47,6 +82,7 @@ export default function EmailLoginPage() {
           email: data.student.email,
         })
       )
+      sessionStorage.setItem("faceEnrollmentComplete", "true")
 
       setTimeout(() => {
         setIsLoading(false)
@@ -58,6 +94,27 @@ export default function EmailLoginPage() {
       setError("Login failed. Please try again.")
     }
   }
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingFaceEnrollment")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo: string; email: string; name: string }
+      if (parsed?.studentNo) {
+        setPendingEnrollment(parsed)
+        const params = new URLSearchParams({
+          studentNo: parsed.studentNo,
+          email: parsed.email || "",
+          name: parsed.name || "",
+        })
+        router.replace(`/face-enrollment?${params.toString()}`)
+      }
+    } catch (parseError) {
+      console.error("Pending enrollment parse error:", parseError)
+    }
+  }, [router])
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -83,6 +140,31 @@ export default function EmailLoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {pendingEnrollment && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500 rounded-lg">
+                <p className="text-sm text-amber-700">
+                  Face enrollment is required before you can sign in. Continue face enrollment to activate your
+                  account.
+                </p>
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      router.push(
+                        `/face-enrollment?${new URLSearchParams({
+                          studentNo: pendingEnrollment.studentNo,
+                          email: pendingEnrollment.email,
+                          name: pendingEnrollment.name,
+                        }).toString()}`
+                      )
+                    }}
+                  >
+                    Continue Face Enrollment
+                  </Button>
+                </div>
+              </div>
+            )}
             {error && (
               <div className="p-4 bg-red-500/10 border border-red-500 rounded-lg">
                 <p className="text-sm text-red-700">{error}</p>

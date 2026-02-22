@@ -1,12 +1,18 @@
 "use client"
-"use client"
 
 import React, { useRef, useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
-import Link from "next/link"
-import { detectFaceInImage, loadModels, calculate3DDepth } from "@/lib/facial-recognition-pretrained"
+import { useRouter, useSearchParams } from "next/navigation"
+import {
+  detectFaceInImage,
+  loadModels,
+  calculate3DDepth,
+} from "@/lib/facial-recognition-pretrained"
 import { setCameraDirection } from "@/lib/camera-depth"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { CheckCircle2, Camera, ArrowLeft, ShieldCheck, Sparkles } from "lucide-react"
 
 declare global {
   interface Window {
@@ -15,6 +21,7 @@ declare global {
 }
 
 export default function FaceEnrollmentPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -29,6 +36,7 @@ export default function FaceEnrollmentPage() {
   const [modelsLoaded, setModelsLoaded] = useState(false)
   const [capturedDescriptors, setCapturedDescriptors] = useState<number[][]>([])
   const [enrollmentComplete, setEnrollmentComplete] = useState(false)
+  const [showExitPrompt, setShowExitPrompt] = useState(false)
 
   useEffect(() => {
     const studentNoParam = searchParams.get("studentNo")
@@ -39,6 +47,45 @@ export default function FaceEnrollmentPage() {
     if (nameParam) setName(nameParam)
     if (emailParam) setEmail(emailParam)
   }, [searchParams])
+
+  useEffect(() => {
+    if (!studentId || !enrollmentComplete) {
+      return
+    }
+    const finalizeEnrollment = async () => {
+      try {
+        const response = await fetch(
+          `/api/profile?studentNo=${encodeURIComponent(studentId)}`
+        )
+        const data = await response.json()
+        if (!response.ok || !data.success || !data.student) {
+          return
+        }
+        sessionStorage.setItem(
+          "currentUser",
+          JSON.stringify({
+            studentNumber: data.student.studentNo,
+            fullName: `${data.student.firstName} ${data.student.lastName}`,
+            email: data.student.email,
+          })
+        )
+      } catch (error) {
+        console.error("Finalize enrollment error:", error)
+      }
+    }
+
+    finalizeEnrollment()
+  }, [studentId, enrollmentComplete])
+
+  useEffect(() => {
+    if (!studentId || enrollmentComplete) {
+      return
+    }
+    sessionStorage.setItem(
+      "pendingFaceEnrollment",
+      JSON.stringify({ studentNo: studentId, email, name })
+    )
+  }, [studentId, email, name, enrollmentComplete])
 
   useEffect(() => {
     // Load face-api.js script
@@ -254,6 +301,8 @@ export default function FaceEnrollmentPage() {
             setEnrollmentComplete(true)
             setCapturedFaceCount(0)
             setCapturedDescriptors([])
+            sessionStorage.removeItem("pendingFaceEnrollment")
+            sessionStorage.setItem("faceEnrollmentComplete", "true")
           } catch (enrollError) {
             console.error("Enrollment error:", enrollError)
             setEnrollmentStatus(`❌ Enrollment failed: ${String(enrollError).substring(0, 50)}`)
@@ -285,167 +334,294 @@ export default function FaceEnrollmentPage() {
     setEnrollmentComplete(false)
   }
 
+  useEffect(() => {
+    if (!studentId) {
+      return
+    }
+    const checkEnrollment = async () => {
+      try {
+        const response = await fetch(
+          `/api/face-enrollment?studentNo=${encodeURIComponent(studentId)}`
+        )
+        const data = await response.json()
+        if (response.ok && data?.success && data?.enrolled) {
+          setEnrollmentComplete(true)
+          sessionStorage.removeItem("pendingFaceEnrollment")
+          sessionStorage.setItem("faceEnrollmentComplete", "true")
+        }
+      } catch (error) {
+        console.error("Face enrollment check error:", error)
+      }
+    }
+
+    checkEnrollment()
+  }, [studentId])
+
   return (
-    <div style={{ maxWidth: 600, margin: "40px auto", padding: 20, border: "1px solid #eee", borderRadius: 8 }}>
-      <h2>Face Enrollment System</h2>
-      <p style={{ fontSize: 14, color: "#666", marginBottom: 16 }}>Enroll your face to enable identity verification for document access</p>
-
-      {/* Student Info Input */}
-      <div style={{ marginBottom: 16, padding: 12, backgroundColor: "#f5f5f5", borderRadius: 4 }}>
-        <label htmlFor="student-id">Student ID:</label>
-        <input
-          id="student-id"
-          type="text"
-          value={studentId}
-          onChange={(e) => setStudentId(e.target.value)}
-          placeholder="Enter your student ID"
-          style={{ width: "100%", padding: 8, marginBottom: 12, borderRadius: 4, border: "1px solid #ccc" }}
-        />
-        
-        <label htmlFor="student-name">Full Name:</label>
-        <input
-          id="student-name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter your full name"
-          style={{ width: "100%", padding: 8, marginBottom: 12, borderRadius: 4, border: "1px solid #ccc" }}
-        />
-        
-        <label htmlFor="student-email">Email:</label>
-        <input
-          id="student-email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Enter your school email"
-          style={{ width: "100%", padding: 8, borderRadius: 4, border: "1px solid #ccc" }}
-        />
-      </div>
-
-      {/* Camera Direction Settings */}
-      <div style={{ marginBottom: 16 }}>
-        <label htmlFor="camera-direction">Camera Direction:</label>
-        <select
-          id="camera-direction"
-          value={cameraDirection}
-          onChange={handleCameraDirectionChange}
-          style={{ marginLeft: 8, padding: 6 }}
-        >
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-        </select>
-      </div>
-
-      {/* Camera Feed */}
-      <div style={{ marginBottom: 16, textAlign: "center" }}>
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          style={{
-            width: "100%",
-            maxWidth: 400,
-            borderRadius: 8,
-            border: "2px solid #ccc",
-            transform: cameraDirection === "left" ? "scaleX(-1)" : "scaleX(1)",
-          }}
-        />
-      </div>
-
-      {/* Hidden Canvas for Capture */}
-      <canvas ref={canvasRef} style={{ display: "none" }} />
-
-      {/* Capture Progress */}
-      <div style={{ marginBottom: 16, textAlign: "center" }}>
-        <p style={{ fontSize: 14, fontWeight: "bold" }}>
-          Captures: {capturedFaceCount}/3
-        </p>
-        <div style={{ width: "100%", height: 8, backgroundColor: "#ddd", borderRadius: 4, overflow: "hidden" }}>
-          <div style={{ width: `${(capturedFaceCount / 3) * 100}%`, height: "100%", backgroundColor: "#4CAF50", transition: "width 0.3s" }} />
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border bg-card">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/logo-circle.png" alt="HAU seal" className="w-10 h-10 rounded-full object-cover" />
+            <div>
+              <h1 className="font-bold text-foreground">Holy Angel University</h1>
+              <p className="text-xs text-muted-foreground">Face Enrollment</p>
+            </div>
+          </div>
+          {!enrollmentComplete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowExitPrompt(true)}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Login
+            </Button>
+          )}
         </div>
-      </div>
+      </header>
 
-      {/* Capture Button */}
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <button
-          onClick={captureForEnrollment}
-          disabled={isProcessing || !studentId || !name || !isStreaming || !modelsLoaded}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: isProcessing || !studentId || !name || !modelsLoaded ? "#ccc" : "#4CAF50",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: isProcessing || !studentId || !name || !modelsLoaded ? "not-allowed" : "pointer",
-            marginRight: 8,
-          }}
-        >
-          {!modelsLoaded ? "Loading models..." : isProcessing ? "Processing..." : `Capture Face (${capturedFaceCount}/3)`}
-        </button>
-        
-        <button
-          onClick={resetEnrollment}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#2196F3",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
-          Reset
-        </button>
-      </div>
+      <main className="container mx-auto px-4 py-10">
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <Card className="p-8">
+            <div className="flex items-start justify-between gap-4 mb-8">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
+                  <ShieldCheck className="w-4 h-4" />
+                  Required to activate your account
+                </div>
+                <h2 className="text-2xl font-bold text-foreground mt-3">Face Enrollment</h2>
+                <p className="text-sm text-muted-foreground">
+                  Capture three angles so we can securely verify your identity when you log in.
+                </p>
+              </div>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+                <span className={`h-2 w-2 rounded-full ${modelsLoaded ? "bg-green-500" : "bg-yellow-400"}`} />
+                {modelsLoaded ? "Models ready" : "Loading models"}
+              </div>
+            </div>
 
-      {/* Status Messages */}
-      {enrollmentStatus && (
-        <div style={{
-          marginTop: 24,
-          padding: 12,
-          backgroundColor: enrollmentStatus.includes("❌") ? "#ffebee" : "#e8f5e9",
-          borderLeft: `4px solid ${enrollmentStatus.includes("❌") ? "#f44336" : "#4CAF50"}`,
-          borderRadius: 4,
-        }}>
-          <p style={{ margin: 0, fontSize: 14 }}>{enrollmentStatus}</p>
-          <p style={{ margin: "8px 0 0 0", fontSize: 11, color: "#666" }}>
-            (Open browser console with F12 for detailed logs)
-          </p>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="student-id">Student Number</Label>
+                  <Input
+                    id="student-id"
+                    value={studentId}
+                    onChange={(e) => setStudentId(e.target.value)}
+                    placeholder="2024-123456"
+                    disabled={enrollmentComplete}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="student-name">Full Name</Label>
+                  <Input
+                    id="student-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Juan Dela Cruz"
+                    disabled={enrollmentComplete}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="student-email">Email</Label>
+                  <Input
+                    id="student-email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="student@hau.edu.ph"
+                    disabled={enrollmentComplete}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold text-foreground">Capture guidance</p>
+                  <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+                    <li>• Center your face within the frame.</li>
+                    <li>• Capture three angles: center, left, right.</li>
+                    <li>• Avoid backlight; keep your face well lit.</li>
+                    <li>• Remove masks or large accessories.</li>
+                  </ul>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-border px-4 py-3 text-xs text-muted-foreground">
+                  <span>Camera status</span>
+                  <span className={isStreaming ? "text-green-600" : "text-red-600"}>
+                    {isStreaming ? "Active" : "Inactive"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Camera className="w-4 h-4" />
+                  Captures
+                </div>
+                <span className="text-sm font-semibold text-foreground">{capturedFaceCount}/3</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${(capturedFaceCount / 3) * 100}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={captureForEnrollment}
+                  disabled={
+                    isProcessing ||
+                    !studentId ||
+                    !name ||
+                    !isStreaming ||
+                    !modelsLoaded ||
+                    enrollmentComplete
+                  }
+                >
+                  {!modelsLoaded
+                    ? "Loading models..."
+                    : isProcessing
+                      ? "Processing..."
+                      : capturedFaceCount >= 2
+                        ? "Capture final angle"
+                        : "Capture face"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={resetEnrollment}
+                  disabled={isProcessing}
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
+
+            {enrollmentStatus && (
+              <div
+                className={`mt-6 rounded-xl border px-4 py-3 text-sm ${
+                  enrollmentStatus.includes("❌")
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-green-200 bg-green-50 text-green-700"
+                }`}
+              >
+                {enrollmentStatus}
+              </div>
+            )}
+
+            {enrollmentComplete && (
+              <div className="mt-6 flex flex-col gap-3">
+                <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Face enrollment complete. Your account is now active.
+                </div>
+                <Button
+                  onClick={() => router.push("/auth/email")}
+                  className="w-full"
+                >
+                  Continue to Login
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          <div className="space-y-6">
+            <Card className="p-6 bg-muted/40">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Why this step matters</p>
+                  <p className="text-sm text-muted-foreground">
+                    Face enrollment protects your records and speeds up verification for future requests.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <span>Identity verification</span>
+                  <span className="text-foreground">Required</span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <span>Estimated time</span>
+                  <span className="text-foreground">2-3 minutes</span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <span>Captured angles</span>
+                  <span className="text-foreground">3</span>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <p className="text-sm font-semibold text-foreground">Camera settings</p>
+              <div className="mt-3 flex items-center gap-3">
+                <Label htmlFor="camera-direction" className="text-xs text-muted-foreground">
+                  Mirror direction
+                </Label>
+                <select
+                  id="camera-direction"
+                  value={cameraDirection}
+                  onChange={handleCameraDirectionChange}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="left">Mirror left</option>
+                  <option value="center">Normal</option>
+                  <option value="right">Mirror right</option>
+                </select>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <p className="text-sm font-semibold text-foreground">Live preview</p>
+              <div className="mt-4 relative overflow-hidden rounded-xl border border-border">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  className="h-[280px] w-full object-cover"
+                  style={{
+                    transform: cameraDirection === "left" ? "scaleX(-1)" : "scaleX(1)",
+                  }}
+                />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="h-40 w-32 rounded-2xl border-2 border-primary/80" />
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </main>
+
+      <canvas ref={canvasRef} className="hidden" />
+
+      {showExitPrompt && !enrollmentComplete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <Card className="w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-foreground">Finish enrollment first</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Face enrollment is required before you can use your account.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button className="flex-1" onClick={() => setShowExitPrompt(false)}>
+                Continue enrollment
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  sessionStorage.removeItem("pendingFaceEnrollment")
+                  router.push("/auth")
+                }}
+              >
+                Back to login
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
-
-      {enrollmentComplete && (
-        <div style={{ marginTop: 16 }}>
-          <Button asChild style={{ width: "100%" }}>
-            <Link href="/auth/email">Continue to Login</Link>
-          </Button>
-        </div>
-      )}
-
-      {/* Instructions */}
-      <div style={{ marginTop: 24, padding: 12, backgroundColor: "#f0f8ff", borderRadius: 4 }}>
-        <h3 style={{ margin: "0 0 8px 0", fontSize: 14 }}>Enrollment Instructions:</h3>
-        <ul style={{ margin: "8px 0", paddingLeft: 20, fontSize: 12 }}>
-          <li>Enter your Student ID and Full Name</li>
-          <li>Capture 3 different angles: Face Center, Face Left, Face Right</li>
-          <li>Ensure good lighting and clear face visibility</li>
-          <li>Once enrolled, your face will be verified for document access</li>
-          <li>The system uses 3D depth detection to prevent spoofing</li>
-        </ul>
-      </div>
-
-      {/* Camera Status */}
-      <div style={{ marginTop: 24, textAlign: "center" }}>
-        <p style={{ fontSize: 12, color: isStreaming ? "green" : "red" }}>
-          Camera Status: {isStreaming ? "✓ Active" : "✗ Inactive"}
-        </p>
-        <p style={{ fontSize: 12, color: modelsLoaded ? "green" : "orange" }}>
-          Models Status: {modelsLoaded ? "✓ Loaded" : "⏳ Loading... (this may take 20-30 seconds on first load)"}
-        </p>
-      </div>
-
     </div>
-  );
+  )
 }

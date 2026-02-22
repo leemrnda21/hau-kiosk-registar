@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Mail, Lock, User, IdCard } from "lucide-react"
@@ -20,6 +20,7 @@ type RegisterResponse = {
     firstName: string
     lastName: string
     email: string
+    status?: string
   }
 }
 
@@ -34,6 +35,26 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingFaceEnrollment")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+      if (parsed?.studentNo) {
+        const params = new URLSearchParams({
+          studentNo: parsed.studentNo,
+          email: parsed.email || "",
+          name: parsed.name || "",
+        })
+        router.replace(`/face-enrollment?${params.toString()}`)
+      }
+    } catch (error) {
+      console.error("Pending enrollment parse error:", error)
+    }
+  }, [router])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -63,13 +84,18 @@ export default function RegisterPage() {
       }
 
       const fullName = `${data.student.firstName} ${data.student.lastName}`
-      const params = new URLSearchParams({
-        studentNo: data.student.studentNo,
-        email: data.student.email,
-        name: fullName,
-      })
-
-      router.push(`/face-enrollment?${params.toString()}`)
+      if ((data.student.status || "Pending").toLowerCase() !== "active") {
+        sessionStorage.setItem(
+          "pendingStudentApproval",
+          JSON.stringify({
+            studentNo: data.student.studentNo,
+            email: data.student.email,
+            name: fullName,
+          })
+        )
+        router.push("/auth?pending=approval")
+        return
+      }
     } catch (err) {
       console.error("Registration error:", err)
       setError("Registration failed. Please try again.")

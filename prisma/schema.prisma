@@ -25,11 +25,22 @@ model Student {
   yearLevel   String?
   phone       String?
   address     String?
-  status      String       @default("Active")
+  status      String       @default("Pending")
   enrollments Enrollment[]
   faceEnrollment FaceEnrollment?
   documentRequests DocumentRequest[]
   createdAt   DateTime     @default(now())
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  firstName    String
+  lastName     String
+  passwordHash String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
 }
 
 model FaceEnrollment {
@@ -75,6 +86,7 @@ enum DocumentStatus {
   processing
   submitted
   ready
+  rejected
 }
 
 enum DocumentType {
@@ -105,4 +117,5 @@ model DocumentRequest {
   paymentMethod String?
   totalAmount Int?
   updatedAt   DateTime       @updatedAt
+  @@index([status, requestedAt])
 }

@@ -30,6 +30,91 @@ export default function FaceStudentLoginPage() {
   const [modelsLoaded, setModelsLoaded] = useState(false)
   const autoStartRef = useRef(false)
 
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingFaceEnrollment")
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+        if (parsed?.studentNo) {
+          const params = new URLSearchParams({
+            studentNo: parsed.studentNo,
+            email: parsed.email || "",
+            name: parsed.name || "",
+          })
+          router.replace(`/face-enrollment?${params.toString()}`)
+          return
+        }
+      } catch (error) {
+        console.error("Pending enrollment parse error:", error)
+      }
+    }
+
+    const userString = sessionStorage.getItem("currentUser")
+    if (!userString) {
+      return
+    }
+    let user: { studentNumber?: string; fullName?: string; email?: string } | null = null
+    try {
+      user = JSON.parse(userString)
+    } catch (error) {
+      console.error("Current user parse error:", error)
+      return
+    }
+
+    if (!user?.studentNumber) {
+      return
+    }
+
+    const checkEnrollment = async () => {
+      try {
+        const response = await fetch(
+          `/api/face-enrollment?studentNo=${encodeURIComponent(user.studentNumber as string)}`
+        )
+        const data = await response.json()
+        if (response.ok && data?.success && data?.enrolled) {
+          sessionStorage.setItem("faceEnrollmentComplete", "true")
+          return
+        }
+
+        const pending = {
+          studentNo: user.studentNumber,
+          email: user.email || "",
+          name: user.fullName || "",
+        }
+        sessionStorage.setItem("pendingFaceEnrollment", JSON.stringify(pending))
+        const params = new URLSearchParams({
+          studentNo: pending.studentNo || "",
+          email: pending.email,
+          name: pending.name,
+        })
+        router.replace(`/face-enrollment?${params.toString()}`)
+      } catch (error) {
+        console.error("Face enrollment check error:", error)
+      }
+    }
+
+    checkEnrollment()
+  }, [router])
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingStudentApproval")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+      if (parsed?.studentNo) {
+        setResult({
+          success: false,
+          message: "Your account is pending approval. Please wait for admin activation.",
+        })
+        setStep("input")
+      }
+    } catch (error) {
+      console.error("Pending approval parse error:", error)
+    }
+  }, [])
+
   // Load face-api.js and TensorFlow
   useEffect(() => {
     const script = document.createElement("script")
@@ -154,6 +239,26 @@ export default function FaceStudentLoginPage() {
         // 1. A face is detected and verified in the database
         // 2. The recognized student matches the entered student number
         if (recognition.verified && recognition.studentId === studentNumber) {
+          const approvalResponse = await fetch(
+            `/api/profile?studentNo=${encodeURIComponent(recognition.studentId)}`
+          )
+          const approvalData = await approvalResponse.json()
+          if (!approvalResponse.ok || !approvalData.success || approvalData.student?.status !== "Active") {
+            sessionStorage.setItem(
+              "pendingStudentApproval",
+              JSON.stringify({
+                studentNo: recognition.studentId,
+                email: recognition.email,
+                name: recognition.name,
+              })
+            )
+            setResult({
+              success: false,
+              message: "Your account is pending approval. Please wait for admin activation.",
+            })
+            return
+          }
+
           setStep("verify")
           setFaceDetected(true)
           if (recognition.name && recognition.email) {
@@ -165,13 +270,14 @@ export default function FaceStudentLoginPage() {
                 email: recognition.email,
               })
             )
+            sessionStorage.setItem("faceEnrollmentComplete", "true")
+            sessionStorage.removeItem("pendingFaceEnrollment")
           }
           setResult({
             success: true,
             message: "Face verified! Redirecting..."
           })
 
-          // Redirect to dashboard after 2 seconds
           setTimeout(() => {
             router.push("/dashboard")
           }, 2000)

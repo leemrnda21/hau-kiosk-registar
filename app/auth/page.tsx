@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, Mail, User, Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,54 @@ import { Card } from "@/components/ui/card"
 
 export default function AuthPage() {
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null)
+  const [pendingEnrollment, setPendingEnrollment] = useState<{
+    studentNo: string
+    email: string
+    name: string
+  } | null>(null)
+  const [pendingApproval, setPendingApproval] = useState<{
+    studentNo: string
+    email: string
+    name: string
+  } | null>(null)
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingFaceEnrollment")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+      if (parsed?.studentNo) {
+        setPendingEnrollment({
+          studentNo: parsed.studentNo,
+          email: parsed.email || "",
+          name: parsed.name || "",
+        })
+      }
+    } catch (error) {
+      console.error("Pending enrollment parse error:", error)
+    }
+  }, [])
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingStudentApproval")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+      if (parsed?.studentNo) {
+        setPendingApproval({
+          studentNo: parsed.studentNo,
+          email: parsed.email || "",
+          name: parsed.name || "",
+        })
+      }
+    } catch (error) {
+      console.error("Pending approval parse error:", error)
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,6 +81,39 @@ export default function AuthPage() {
               </Button>
             </div>
           </div>
+
+          {pendingEnrollment && (
+            <Card className="p-5 mb-8 border-amber-500/60 bg-amber-500/10">
+              <p className="text-sm text-amber-700">
+                Face enrollment is required before you can sign in. Continue enrollment to activate your account.
+              </p>
+              <div className="mt-3 flex justify-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  asChild
+                >
+                  <Link
+                    href={`/face-enrollment?${new URLSearchParams({
+                      studentNo: pendingEnrollment.studentNo,
+                      email: pendingEnrollment.email,
+                      name: pendingEnrollment.name,
+                    }).toString()}`}
+                  >
+                    Continue Face Enrollment
+                  </Link>
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {pendingApproval && (
+            <Card className="p-5 mb-8 border-blue-500/60 bg-blue-500/10">
+              <p className="text-sm text-blue-700">
+                Your registration is pending approval. We will notify you once an admin activates your account.
+              </p>
+            </Card>
+          )}
 
           <div className="grid md:grid-cols-3 gap-6">
             {/* Email Login */}

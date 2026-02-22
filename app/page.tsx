@@ -69,7 +69,7 @@ export default function LandingPage() {
           </Link>
 
           {/* Touch Mode Card */}
-          <Link href="/touch-mode" className="group">
+          <Link href="/auth" className="group">
             <Card className="h-full p-8 hover:shadow-xl transition-all duration-300 hover:scale-105 border-2 hover:border-primary cursor-pointer">
               <div className="flex flex-col items-center text-center gap-6">
                 <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center group-hover:bg-primary/20 transition-colors">

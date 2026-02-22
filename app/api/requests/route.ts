@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { broadcastEvent } from "@/lib/sse-broker";
 
 export const runtime = "nodejs";
 
@@ -103,6 +104,13 @@ export async function POST(request: Request) {
         });
       })
     );
+
+    created.forEach((request) => {
+      broadcastEvent({
+        type: "request-created",
+        data: { studentNo, requestId: request.id },
+      });
+    });
 
     return NextResponse.json({ success: true, requests: created });
   } catch (error) {

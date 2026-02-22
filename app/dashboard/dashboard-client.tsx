@@ -16,7 +16,7 @@ type CurrentUser = {
 type DashboardRequest = {
   id: string
   type: string
-  status: "pending" | "processing" | "submitted" | "ready"
+  status: "pending" | "processing" | "submitted" | "ready" | "rejected"
   referenceNo: string
   requestedAt: string
 }
@@ -50,6 +50,26 @@ export default function DashboardClient() {
     }
     setIsLoading(false)
   }, [])
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("pendingFaceEnrollment")
+    if (!stored) {
+      return
+    }
+    try {
+      const parsed = JSON.parse(stored) as { studentNo?: string; email?: string; name?: string }
+      if (parsed?.studentNo) {
+        const params = new URLSearchParams({
+          studentNo: parsed.studentNo,
+          email: parsed.email || "",
+          name: parsed.name || "",
+        })
+        router.replace(`/face-enrollment?${params.toString()}`)
+      }
+    } catch (error) {
+      console.error("Pending enrollment parse error:", error)
+    }
+  }, [router])
 
   useEffect(() => {
     if (!currentUser) {
@@ -89,6 +109,44 @@ export default function DashboardClient() {
     loadRequests()
   }, [currentUser])
 
+  useEffect(() => {
+    if (!currentUser?.studentNumber) {
+      return
+    }
+
+    const eventSource = new EventSource("/api/events")
+    const handleUpdate = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data)
+        if (payload?.studentNo && payload.studentNo !== currentUser.studentNumber) {
+          return
+        }
+        fetch(`/api/dashboard/requests?studentNo=${encodeURIComponent(currentUser.studentNumber)}`)
+          .then((response) => response.json())
+          .then((data) => {
+            if (data?.success) {
+              setRequests(data.requests || [])
+              setStats({
+                pending: data.stats?.pending ?? 0,
+                ready: data.stats?.ready ?? 0,
+                submitted: data.stats?.submitted ?? 0,
+                total: data.stats?.total ?? 0,
+              })
+            }
+          })
+      } catch (error) {
+        console.error("Event update parse error:", error)
+      }
+    }
+
+    eventSource.addEventListener("request-updated", handleUpdate)
+    eventSource.addEventListener("request-created", handleUpdate)
+
+    return () => {
+      eventSource.close()
+    }
+  }, [currentUser])
+
   const handleLogout = () => {
     sessionStorage.removeItem('currentUser')
     router.push('/')
@@ -123,6 +181,7 @@ export default function DashboardClient() {
     processing: "bg-yellow-500/10 text-yellow-700",
     submitted: "bg-blue-500/10 text-blue-700",
     ready: "bg-green-500/10 text-green-700",
+    rejected: "bg-rose-500/10 text-rose-700",
   } as const
 
   const formatDate = (value: string) => {
