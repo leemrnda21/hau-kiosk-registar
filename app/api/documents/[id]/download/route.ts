@@ -4,9 +4,9 @@ import { generateDocumentPdf } from "@/lib/pdf-templates";
 
 export const runtime = "nodejs";
 
-export async function GET(_: Request, context: { params: { id: string } }) {
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const requestId = context.params.id;
+    const { id: requestId } = await params;
 
     const request = await prisma.documentRequest.findUnique({
       where: { id: requestId },
