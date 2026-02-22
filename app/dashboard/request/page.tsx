@@ -72,7 +72,7 @@ export default function RequestPage() {
     }, 0)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const userString = sessionStorage.getItem("currentUser")
     const currentUser = userString ? JSON.parse(userString) : null
 
@@ -95,6 +95,47 @@ export default function RequestPage() {
       paymentMethod,
       total: calculateTotal(),
     }
+
+    if (paymentMethod === "pickup") {
+      try {
+        const response = await fetch("/api/requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentNo: requestData.studentNo,
+            documents: requestData.documents,
+            purpose: requestData.purpose,
+            deliveryMethod: requestData.deliveryMethod,
+            paymentMethod: "Cash on Pickup",
+            total: requestData.total,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || "Failed to submit request.")
+        }
+
+        const referenceNumber = data.requests?.[0]?.referenceNo || `REQ-${Date.now()}`
+        const receiptData = {
+          ...requestData,
+          referenceNumber,
+          paymentReference: `PAY-${Date.now()}`,
+          paymentMethod: "Cash on Pickup",
+          paymentDate: new Date().toISOString(),
+          status: "Pending Payment",
+        }
+
+        sessionStorage.setItem("receiptData", JSON.stringify(receiptData))
+        sessionStorage.removeItem("pendingRequest")
+        router.push("/dashboard/receipt")
+      } catch (error) {
+        console.error("Pickup submit error:", error)
+      }
+      return
+    }
+
     sessionStorage.setItem("pendingRequest", JSON.stringify(requestData))
     router.push("/dashboard/payment")
   }
