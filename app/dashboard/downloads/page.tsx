@@ -1,23 +1,33 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Download, FileText, Calendar, ExternalLink, Printer, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { demoDocuments, type DocumentStatus, type DocumentType } from "@/lib/demo-documents"
-import { PrintableDocument } from "@/components/printable-document"
+import type { DocumentStatus } from "@/lib/demo-documents"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { sendEmailWithPDF, formatDocumentForEmail } from "@/lib/email-service"
 
 export default function DownloadsPage() {
   const router = useRouter()
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | "all">("all")
-  const [typeFilter, setTypeFilter] = useState<DocumentType | "all">("all")
+  const [typeFilter, setTypeFilter] = useState<string>("all")
   const [previewDoc, setPreviewDoc] = useState<string | null>(null)
-  const [currentUser, setCurrentUser] = useState<{ email: string; fullName: string } | null>(null)
+  const [currentUser, setCurrentUser] = useState<{ email: string; fullName: string; studentNumber: string } | null>(null)
   const [emailStatus, setEmailStatus] = useState<string>("")
+  const [documents, setDocuments] = useState<
+    Array<{
+      id: string
+      referenceNo: string
+      type: string
+      status: DocumentStatus
+      requestedAt: string
+      completedAt?: string | null
+    }>
+  >([])
+  const [isLoading, setIsLoading] = useState(true)
 
   // Get user info from sessionStorage
   useEffect(() => {
@@ -28,29 +38,67 @@ export default function DownloadsPage() {
     }
   }, [])
 
-  const filteredDocuments = demoDocuments.filter((doc) => {
-    const matchesStatus = statusFilter === "all" || doc.status === statusFilter
-    const matchesType = typeFilter === "all" || doc.type === typeFilter
-    return matchesStatus && matchesType
-  })
+  useEffect(() => {
+    if (!currentUser?.studentNumber) {
+      setIsLoading(false)
+      return
+    }
 
-  const readyDocuments = filteredDocuments.filter((doc) => doc.status === "ready")
-  const selectedDoc = previewDoc ? demoDocuments.find((d) => d.id === previewDoc) : null
+    const loadDocuments = async () => {
+      try {
+        const response = await fetch(
+          `/api/documents?studentNo=${encodeURIComponent(currentUser.studentNumber)}`
+        )
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          setDocuments([])
+          return
+        }
+        setDocuments(data.requests || [])
+      } catch (error) {
+        console.error("Failed to load documents:", error)
+        setDocuments([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadDocuments()
+  }, [currentUser])
+
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => {
+      const matchesStatus = statusFilter === "all" || doc.status === statusFilter
+      const matchesType =
+        typeFilter === "all" ||
+        doc.type === typeFilter ||
+        doc.type.replace(/_/g, " ").toLowerCase().includes(typeFilter.toLowerCase())
+      return matchesStatus && matchesType
+    })
+  }, [documents, statusFilter, typeFilter])
+
+  const selectedDoc = previewDoc ? documents.find((d) => d.id === previewDoc) : null
+
+  const formatDocumentType = (value: string) =>
+    value
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
 
   const handlePrint = async (docId: string) => {
-    const doc = demoDocuments.find((d) => d.id === docId)
+    const doc = documents.find((d) => d.id === docId)
     if (!doc) return
 
     // Send email with PDF after printing
     if (currentUser) {
       setEmailStatus("Sending document to email...")
-      const emailBody = formatDocumentForEmail(currentUser.fullName, doc.type, doc.content || "")
+      const emailBody = formatDocumentForEmail(currentUser.fullName, formatDocumentType(doc.type), "")
       const result = await sendEmailWithPDF({
         to: currentUser.email,
-        subject: `Your ${doc.type} from Holy Angel University`,
+        subject: `Your ${formatDocumentType(doc.type)} from Holy Angel University`,
         body: emailBody,
-        documentName: `${doc.type.replace(/\s+/g, '_')}.pdf`,
-        documentContent: doc.content || "",
+        documentName: `${formatDocumentType(doc.type).replace(/\s+/g, '_')}.pdf`,
+        documentContent: "",
       })
       
       setEmailStatus(result.success ? `✓ ${result.message}` : `✗ ${result.message}`)
@@ -62,7 +110,7 @@ export default function DownloadsPage() {
       documents: [
         {
           id: doc.id,
-          name: doc.type,
+          name: formatDocumentType(doc.type),
           price: 50,
           copies: 1,
         },
@@ -81,15 +129,15 @@ export default function DownloadsPage() {
     // Send email with PDF when downloading
     if (currentUser) {
       setEmailStatus("Sending document to email...")
-      const doc = demoDocuments.find((d) => d.id === docId)
+      const doc = documents.find((d) => d.id === docId)
       if (doc) {
-        const emailBody = formatDocumentForEmail(currentUser.fullName, docName, doc.content || "")
+        const emailBody = formatDocumentForEmail(currentUser.fullName, docName, "")
         const result = await sendEmailWithPDF({
           to: currentUser.email,
           subject: `Your ${docName} from Holy Angel University`,
           body: emailBody,
           documentName: `${docName.replace(/\s+/g, '_')}.pdf`,
-          documentContent: doc.content || "",
+          documentContent: "",
         })
         
         setEmailStatus(result.success ? `✓ ${result.message}` : `✗ ${result.message}`)
@@ -98,7 +146,7 @@ export default function DownloadsPage() {
     }
     
     // Simulate download
-    alert(`Downloading ${docName} (${docId})`)
+    window.open(`/api/documents/${docId}/download`, "_blank")
   }
 
   return (
@@ -117,7 +165,11 @@ export default function DownloadsPage() {
 
       {selectedDoc && previewDoc && (
         <div className="print:block hidden">
-          <PrintableDocument document={selectedDoc} />
+          <iframe
+            title="Document Preview"
+            src={`/api/documents/${selectedDoc.id}/download`}
+            className="w-full h-[1000px]"
+          />
         </div>
       )}
 
@@ -158,7 +210,7 @@ export default function DownloadsPage() {
                 </SelectContent>
               </Select>
 
-              <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as DocumentType | "all")}>
+              <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value)}>
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Document Type" />
                 </SelectTrigger>
@@ -177,7 +229,13 @@ export default function DownloadsPage() {
             </div>
           </div>
 
-          {filteredDocuments.length === 0 ? (
+          {isLoading ? (
+            <Card className="p-12 text-center">
+              <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-2">Loading documents</h3>
+              <p className="text-muted-foreground">Fetching your requests...</p>
+            </Card>
+          ) : filteredDocuments.length === 0 ? (
             <Card className="p-12 text-center">
               <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-foreground mb-2">No documents found</h3>
@@ -195,22 +253,24 @@ export default function DownloadsPage() {
                       <div className="flex items-center gap-3 mb-3">
                         <FileText className="w-6 h-6 text-primary" />
                         <div>
-                          <h3 className="font-bold text-foreground text-lg">{doc.type}</h3>
-                          <p className="text-sm text-muted-foreground">Reference: {doc.id}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {doc.studentInfo.name} - {doc.studentInfo.studentId}
-                          </p>
+                          <h3 className="font-bold text-foreground text-lg">{formatDocumentType(doc.type)}</h3>
+                          <p className="text-sm text-muted-foreground">Reference: {doc.referenceNo}</p>
+                          {currentUser && (
+                            <p className="text-sm text-muted-foreground">
+                              {currentUser.fullName} - {currentUser.studentNumber}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-6 text-sm text-muted-foreground">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
-                          <span>Requested: {new Date(doc.requestDate).toLocaleDateString()}</span>
+                          <span>Requested: {new Date(doc.requestedAt).toLocaleDateString()}</span>
                         </div>
-                        {doc.completionDate && (
+                        {doc.completedAt && (
                           <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4" />
-                            <span>Completed: {new Date(doc.completionDate).toLocaleDateString()}</span>
+                            <span>Completed: {new Date(doc.completedAt).toLocaleDateString()}</span>
                           </div>
                         )}
                         <div
@@ -237,7 +297,7 @@ export default function DownloadsPage() {
                             <Printer className="w-4 h-4 mr-2" />
                             Print (PHP 50)
                           </Button>
-                          <Button size="sm" onClick={() => handleDownload(doc.id, doc.type)}>
+                          <Button size="sm" onClick={() => handleDownload(doc.id, formatDocumentType(doc.type))}>
                             <Download className="w-4 h-4 mr-2" />
                             Download
                           </Button>
@@ -285,7 +345,11 @@ export default function DownloadsPage() {
                 </Button>
               </div>
             </div>
-            <PrintableDocument document={selectedDoc} />
+            <iframe
+              title="Document Preview"
+              src={`/api/documents/${selectedDoc.id}/download`}
+              className="w-full h-[70vh]"
+            />
           </div>
         </div>
       )}
