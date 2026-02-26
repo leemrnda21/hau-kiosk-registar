@@ -345,10 +345,10 @@ export default function DownloadsPage() {
             <ul className="text-sm text-muted-foreground space-y-1">
               <li>• Printing documents at the kiosk costs PHP 50.00 per document</li>
               <li>• Payment is required before printing</li>
-              <li>• Download links expire after 24 hours for security</li>
+              <li>• Email delivery is available only after approval</li>
               <li>• Documents are watermarked with your student number</li>
               <li>• Digital copies are officially signed by the registrar</li>
-              <li>• Keep your documents secure and do not share download links</li>
+              <li>• Keep your documents secure and do not share email copies</li>
             </ul>
           </Card>
         </main>

@@ -1,4 +1,4 @@
-import { FileText, Clock, Download, User, LogOut, Plus, Search } from "lucide-react"
+import { FileText, Clock, Mail, User, LogOut, Plus, Search } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"

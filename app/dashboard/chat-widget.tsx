@@ -27,7 +27,7 @@ type ChatResponse = {
 const starterPrompts = [
   "Where can I request my transcript?",
   "What is the status of my latest request?",
-  "How do I download ready documents?",
+  "How do I email my ready documents?",
 ]
 
 export default function ChatWidget() {

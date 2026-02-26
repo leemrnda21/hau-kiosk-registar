@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { FileText, Clock, Download, User, LogOut, Plus, Search } from "lucide-react"
+import { FileText, Clock, Mail, User, LogOut, Plus, Search, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
@@ -253,10 +253,10 @@ export default function DashboardClient() {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Ready to Download</p>
+                <p className="text-sm text-muted-foreground mb-1">Ready for Email / Print</p>
                 <p className="text-3xl font-bold text-foreground">{stats.ready}</p>
               </div>
-              <Download className="w-10 h-10 text-green-500" />
+              <Mail className="w-10 h-10 text-green-500" />
             </div>
           </Card>
           <Card className="p-6">
@@ -288,8 +288,8 @@ export default function DashboardClient() {
             </Button>
             <Button asChild className="h-auto py-6 flex-col gap-2 bg-transparent" variant="outline">
               <Link href="/dashboard/downloads">
-                <Download className="w-6 h-6" />
-                <span>Download Documents</span>
+                <Mail className="w-6 h-6" />
+                <span>Ready Documents</span>
               </Link>
             </Button>
             <Button asChild className="h-auto py-6 flex-col gap-2 bg-transparent" variant="outline">

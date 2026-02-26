@@ -33,7 +33,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
     if (request.status !== "ready") {
       return NextResponse.json(
-        { success: false, message: "Document is not available for download." },
+        { success: false, message: "Document is not available yet." },
         { status: 403 }
       );
     }

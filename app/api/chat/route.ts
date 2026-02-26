@@ -39,7 +39,7 @@ const buildReminders = (
     const label = `${formatDocumentType(request.type)} (${request.referenceNo})`
 
     if (request.status === "ready") {
-      reminders.push(`Your ${label} is ready to download.`)
+      reminders.push(`Your ${label} is ready for email or print.`)
       return
     }
 
@@ -81,8 +81,8 @@ const buildFallbackAnswer = (message: string, studentName: string, reminders: st
     )
   } else if (text.includes("status") || text.includes("track")) {
     lines.push("You can track your requests on the Track Requests page or I can summarize them here.")
-  } else if (text.includes("download")) {
-    lines.push("If a request is ready, you can download it from the Downloads page.")
+  } else if (text.includes("download") || text.includes("email") || text.includes("print")) {
+    lines.push("If a request is ready, you can send it by email or print it from the Ready Documents page.")
   } else {
     lines.push(
       "I can help with transcripts, registration, enrollment, and request statuses. Tell me what you need and I will guide you."
@@ -238,7 +238,7 @@ export async function POST(request: Request) {
 
     const suggestedActions = [] as Array<{ label: string; href: string }>
     if (requests.some((request) => request.status === "ready")) {
-      suggestedActions.push({ label: "Download documents", href: "/dashboard/downloads" })
+      suggestedActions.push({ label: "Ready documents", href: "/dashboard/downloads" })
     }
     if (requests.some((request) => request.status === "pending" || request.status === "processing")) {
       suggestedActions.push({ label: "Track requests", href: "/dashboard/track" })
