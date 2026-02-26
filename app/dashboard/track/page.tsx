@@ -209,7 +209,7 @@ export default function TrackPage() {
                   Your reference number is: <strong className="text-foreground">{refNumber}</strong>
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  You'll receive email and SMS notifications as your request progresses.
+                  You'll receive updates as your request progresses.
                 </p>
               </div>
             </div>

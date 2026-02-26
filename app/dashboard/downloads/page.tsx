@@ -278,23 +278,25 @@ export default function DownloadsPage() {
                             <span>Completed: {new Date(doc.completedAt).toLocaleDateString()}</span>
                           </div>
                         )}
-                        <div
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            doc.status === "ready"
-                              ? "bg-green-500/10 text-green-700"
-                              : doc.status === "processing"
-                                ? "bg-blue-500/10 text-blue-700"
-                                : doc.status === "rejected"
-                                  ? "bg-rose-500/10 text-rose-700"
-                                  : "bg-yellow-500/10 text-yellow-700"
-                          }`}
-                        >
-                          {doc.status.charAt(0).toUpperCase() + doc.status.slice(1)}
-                        </div>
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 no-print">
-                      <p className="text-xs text-muted-foreground">
+                      <div className="flex items-center justify-end">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${
+                            doc.status === "ready"
+                              ? "bg-emerald-500/15 text-emerald-700"
+                              : doc.status === "processing"
+                                ? "bg-blue-500/15 text-blue-700"
+                                : doc.status === "rejected"
+                                  ? "bg-rose-500/15 text-rose-700"
+                                  : "bg-amber-500/15 text-amber-700"
+                          }`}
+                        >
+                          {doc.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-right">
                         Release: {doc.deliveryMethod || "--"}
                       </p>
                       {doc.status === "ready" &&
