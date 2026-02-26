@@ -15,6 +15,7 @@ type RequestPayload = {
   purpose?: string;
   deliveryMethod?: string;
   paymentMethod?: string;
+  paymentReference?: string;
   total?: number;
 };
 
@@ -55,7 +56,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Partial<RequestPayload>;
     const studentNo = body.studentNo?.trim();
     const documents = body.documents ?? [];
-    const paymentReference = body.paymentMethod ? `PAY-${Date.now()}` : null;
+    const paymentReference =
+      body.paymentReference?.trim() || (body.paymentMethod ? `PAY-${Date.now()}` : null);
 
     if (!studentNo) {
       return NextResponse.json(

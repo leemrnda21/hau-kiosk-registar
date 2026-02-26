@@ -3,11 +3,9 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, CreditCard, Loader2, AlertCircle, Printer } from "lucide-react"
+import { ArrowLeft, Loader2, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 
 type PendingRequestData = {
   studentNo?: string
@@ -32,17 +30,11 @@ export default function PaymentPage() {
   const router = useRouter()
   const [requestData, setRequestData] = useState<PendingRequestData | null>(null)
   const [processing, setProcessing] = useState(false)
-  const [printing, setPrinting] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "gcash" | "paymaya" | "cash">("card")
-
-  // Card details
-  const [cardNumber, setCardNumber] = useState("")
-  const [cardName, setCardName] = useState("")
-  const [expiryDate, setExpiryDate] = useState("")
-  const [cvv, setCvv] = useState("")
-
-  // E-wallet details
-  const [mobileNumber, setMobileNumber] = useState("")
+  const [sdkReady, setSdkReady] = useState(false)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [paypalOrderId, setPaypalOrderId] = useState<string | null>(null)
+  const [paypalReady, setPaypalReady] = useState(false)
+  const [paypalRetries, setPaypalRetries] = useState(0)
 
   useEffect(() => {
     const data = sessionStorage.getItem("pendingRequest")
@@ -53,73 +45,191 @@ export default function PaymentPage() {
     setRequestData(JSON.parse(data))
   }, [router])
 
-  const handlePayment = async () => {
-    setProcessing(true)
-    try {
-      const paymentLabel =
-        paymentMethod === "card"
-          ? "Credit/Debit Card"
-          : paymentMethod === "gcash"
-            ? "GCash"
-            : paymentMethod === "paymaya"
-              ? "PayMaya"
-              : "Cash on Pickup"
+  useEffect(() => {
+    const loadPayPalSdk = () => {
+      try {
+        setPaymentError(null)
+        const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID
+        if (!clientId) {
+          throw new Error("PayPal client id is missing.")
+        }
 
-      const response = await fetch("/api/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentNo: requestData?.studentNo,
-          documents: requestData?.documents ?? [],
-          purpose: requestData?.purpose,
-          deliveryMethod: requestData?.deliveryMethod,
-          paymentMethod: paymentLabel,
-          total: requestData?.total,
-        }),
-      })
+        if (document.getElementById("paypal-sdk")) {
+          setSdkReady(true)
+          setPaypalReady(true)
+          setPaypalRetries(0)
+          return
+        }
 
-      const data = await response.json()
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to submit request.")
+        const script = document.createElement("script")
+        script.id = "paypal-sdk"
+        script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=PHP`
+        script.async = true
+        script.onload = () => {
+          setSdkReady(true)
+          setPaypalReady(true)
+          setPaypalRetries(0)
+        }
+        script.onerror = () => handlePaymentError("Failed to load PayPal.")
+        document.body.appendChild(script)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to load PayPal."
+        handlePaymentError(message)
       }
-
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      const refNumber = data.requests?.[0]?.referenceNo || `REQ-${Date.now()}`
-      const paymentRef = data.requests?.[0]?.paymentReference || `PAY-${Date.now()}`
-
-      const receiptData = {
-        ...requestData,
-        referenceNumber: refNumber,
-        paymentReference: paymentRef,
-        paymentMethod: paymentLabel,
-        paymentDate: new Date().toISOString(),
-        status: paymentMethod === "cash" ? "Pending Payment" : "Paid",
-      }
-
-      sessionStorage.setItem("receiptData", JSON.stringify(receiptData))
-      sessionStorage.removeItem("pendingRequest")
-
-      if (requestData?.deliveryMethod === "Print at Kiosk" && paymentMethod !== "cash") {
-        sessionStorage.setItem("shouldPrintKiosk", "true")
-      }
-
-      router.push(
-        `/dashboard/track?ref=${encodeURIComponent(refNumber)}&new=1`
-      )
-    } catch (error) {
-      console.error("Payment submit error:", error)
-      setProcessing(false)
     }
+
+    loadPayPalSdk()
+  }, [])
+
+  useEffect(() => {
+    if (!sdkReady || !requestData) {
+      return
+    }
+
+    const renderButtons = async () => {
+      try {
+        const paypal = (window as any).paypal
+        if (!paypal) {
+          if (!paypalReady || paypalRetries < 6) {
+            setTimeout(() => setPaypalRetries((count) => count + 1), 300)
+            return
+          }
+          handlePaymentError("PayPal is unavailable. Check your network, ad-blockers, and the client id.")
+          return
+        }
+
+        const buttonsContainer = document.getElementById("paypal-buttons")
+        if (buttonsContainer?.childNodes.length) {
+          return
+        }
+
+        paypal
+          .Buttons({
+            createOrder: async () => {
+              setPaymentError(null)
+              setProcessing(true)
+              const response = await fetch("/api/paypal/create-order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  amount: requestData.total,
+                  currency: "PHP",
+                }),
+              })
+
+              const data = await response.json()
+
+              if (!response.ok || !data.success) {
+                const issue = data.issue || "paypal_create_failed"
+                setProcessing(false)
+                throw new Error(issue)
+              }
+
+              setPaypalOrderId(data.orderId)
+              setProcessing(false)
+              return data.orderId
+            },
+            onApprove: async (details: any) => {
+              try {
+                setProcessing(true)
+                const response = await fetch("/api/paypal/capture-order", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    orderId: details.orderID,
+                  }),
+                })
+
+                const data = await response.json()
+
+                if (!response.ok || !data.success) {
+                  const issue = data.issue || "paypal_capture_failed"
+                  throw new Error(issue)
+                }
+
+                const reference = data.captureId || paypalOrderId || `PAY-${Date.now()}`
+                await finalizeRequest(reference)
+              } catch (error) {
+                const rawMessage = error instanceof Error ? error.message : "Payment failed."
+                const message = rawMessage === "INSTRUMENT_DECLINED"
+                  ? "PayPal declined the payment instrument. Please use a different sandbox account."
+                  : rawMessage === "PAYER_CANNOT_PAY" || rawMessage === "PAYER_ACTION_REQUIRED"
+                    ? "PayPal requires a different account or additional action. Please check your sandbox account."
+                    : rawMessage === "INVALID_ACCOUNT_STATUS"
+                      ? "PayPal account is not eligible for this payment. Please use a valid sandbox buyer."
+                      : rawMessage
+                handlePaymentError(message)
+              }
+            },
+            onError: (err: any) => {
+              const message = err?.message || "PayPal rejected the payment. Please check your sandbox account and try again."
+              handlePaymentError(message)
+            },
+            onCancel: () => {
+              setProcessing(false)
+              handlePaymentError("Payment cancelled.")
+            },
+          })
+          .render("#paypal-buttons")
+          .catch(() => {
+            handlePaymentError("PayPal failed to render. Please reload the page.")
+          })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Payment failed."
+        handlePaymentError(message)
+      }
+    }
+
+    renderButtons()
+  }, [sdkReady, requestData, paypalOrderId, paypalReady, paypalRetries])
+
+  const handlePaymentError = (message: string) => {
+    setPaymentError(message)
+    setProcessing(false)
   }
 
-  const handlePrint = () => {
-    setPrinting(true)
-    setTimeout(() => {
-      window.print()
-      setPrinting(false)
-    }, 500)
+  const finalizeRequest = async (paymentReference: string) => {
+    const response = await fetch("/api/requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        studentNo: requestData?.studentNo,
+        documents: requestData?.documents ?? [],
+        purpose: requestData?.purpose,
+        deliveryMethod: requestData?.deliveryMethod,
+        paymentMethod: "PayPal",
+        paymentReference,
+        total: requestData?.total,
+      }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Failed to submit request.")
+    }
+
+    const refNumber = data.requests?.[0]?.referenceNo || `REQ-${Date.now()}`
+    const paymentRef = data.requests?.[0]?.paymentReference || paymentReference || `PAY-${Date.now()}`
+
+    const receiptData = {
+      ...requestData,
+      referenceNumber: refNumber,
+      paymentReference: paymentRef,
+      paymentMethod: "PayPal",
+      paymentDate: new Date().toISOString(),
+      status: "Paid",
+    }
+
+    sessionStorage.setItem("receiptData", JSON.stringify(receiptData))
+    sessionStorage.removeItem("pendingRequest")
+
+    if (requestData?.deliveryMethod === "Print at Kiosk") {
+      sessionStorage.setItem("shouldPrintKiosk", "true")
+    }
+
+    setProcessing(false)
+    router.push(`/dashboard/track?ref=${encodeURIComponent(refNumber)}&new=1`)
   }
 
   if (!requestData) {
@@ -168,156 +278,27 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              {/* Payment Method Selection */}
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                <button
-                  onClick={() => setPaymentMethod("card")}
-                  className={`p-4 border rounded-lg transition-colors ${
-                    paymentMethod === "card" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <CreditCard className="w-6 h-6 mx-auto mb-2 text-primary" />
-                  <p className="text-sm font-medium">Card</p>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("gcash")}
-                  className={`p-4 border rounded-lg transition-colors ${
-                    paymentMethod === "gcash" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="w-6 h-6 mx-auto mb-2 bg-blue-500 rounded flex items-center justify-center text-white text-xs font-bold">
-                    G
-                  </div>
-                  <p className="text-sm font-medium">GCash</p>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("paymaya")}
-                  className={`p-4 border rounded-lg transition-colors ${
-                    paymentMethod === "paymaya"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="w-6 h-6 mx-auto mb-2 bg-green-500 rounded flex items-center justify-center text-white text-xs font-bold">
-                    PM
-                  </div>
-                  <p className="text-sm font-medium">PayMaya</p>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("cash")}
-                  className={`p-4 border rounded-lg transition-colors ${
-                    paymentMethod === "cash" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="w-6 h-6 mx-auto mb-2 text-2xl">💵</div>
-                  <p className="text-sm font-medium">Cash</p>
-                </button>
-              </div>
-
-              {/* Card Payment Form */}
-              {paymentMethod === "card" && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cardNumber">Card Number</Label>
-                    <Input
-                      id="cardNumber"
-                      placeholder="1234 5678 9012 3456"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                      maxLength={19}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cardName">Cardholder Name</Label>
-                    <Input
-                      id="cardName"
-                      placeholder="JUAN DELA CRUZ"
-                      value={cardName}
-                      onChange={(e) => setCardName(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="expiry">Expiry Date</Label>
-                      <Input
-                        id="expiry"
-                        placeholder="MM/YY"
-                        value={expiryDate}
-                        onChange={(e) => setExpiryDate(e.target.value)}
-                        maxLength={5}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cvv">CVV</Label>
-                      <Input
-                        id="cvv"
-                        placeholder="123"
-                        type="password"
-                        value={cvv}
-                        onChange={(e) => setCvv(e.target.value)}
-                        maxLength={3}
-                      />
-                    </div>
-                  </div>
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Pay securely with PayPal. Use your sandbox account to test invalid logins or payment failures.
+                  </p>
                 </div>
-              )}
 
-              {/* E-Wallet Payment Form */}
-              {(paymentMethod === "gcash" || paymentMethod === "paymaya") && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <div className="flex gap-3">
-                      <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                          {paymentMethod === "gcash" ? "GCash" : "PayMaya"} Payment
-                        </p>
-                        <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                          You will be redirected to {paymentMethod === "gcash" ? "GCash" : "PayMaya"} to complete your
-                          payment
-                        </p>
-                      </div>
-                    </div>
+                {paymentError && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    {paymentError}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="mobile">Mobile Number</Label>
-                    <Input
-                      id="mobile"
-                      placeholder="09XX XXX XXXX"
-                      value={mobileNumber}
-                      onChange={(e) => setMobileNumber(e.target.value)}
-                      maxLength={11}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Cash Payment Info */}
-              {paymentMethod === "cash" && (
-                <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <div className="flex gap-3">
-                    <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Cash Payment on Pickup</p>
-                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                        Please bring the exact amount when picking up your documents at the Registrar Office. Your
-                        request will be processed once payment is confirmed.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <Button onClick={handlePayment} disabled={processing} className="w-full mt-6" size="lg">
-                {processing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing Payment...
-                  </>
-                ) : (
-                  <>{paymentMethod === "cash" ? "Confirm Request" : `Pay PHP ${requestData.total}.00`}</>
                 )}
-              </Button>
+
+                {!sdkReady && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading PayPal...
+                  </div>
+                )}
+                <div id="paypal-buttons" className="min-h-[44px]" />
+              </div>
             </Card>
           </div>
 

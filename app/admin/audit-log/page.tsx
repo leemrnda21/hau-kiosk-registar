@@ -12,6 +12,10 @@ type AuditLogEntry = {
   entityId?: string | null
   reason?: string | null
   createdAt: string
+  subjectName?: string | null
+  studentNo?: string | null
+  studentEmail?: string | null
+  referenceNo?: string | null
 }
 
 export default function AdminAuditLogPage() {
@@ -67,24 +71,61 @@ export default function AdminAuditLogPage() {
           <p className="text-sm text-muted-foreground">No audit events found.</p>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {logs.map((log) => (
-            <Card key={log.id} className="p-6">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-foreground">
-                    {log.action} • {log.entityType}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {log.actorEmail || "Unknown admin"} • {log.entityId || "--"}
-                  </p>
-                  {log.reason && <p className="text-xs text-muted-foreground">Reason: {log.reason}</p>}
-                </div>
-                <p className="text-xs text-muted-foreground">{formatDate(log.createdAt)}</p>
-              </div>
-            </Card>
-          ))}
-        </div>
+        <Card className="p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/60 text-muted-foreground">
+                <tr className="text-left">
+                  <th className="px-4 py-3 font-medium">When</th>
+                  <th className="px-4 py-3 font-medium">Action</th>
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">By</th>
+                  <th className="px-4 py-3 font-medium">Entity</th>
+                  <th className="px-4 py-3 font-medium">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log, index) => (
+                  <tr
+                    key={log.id}
+                    className={index % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                  >
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                      {formatDate(log.createdAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                        {log.action}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-foreground">
+                        {log.subjectName || "—"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {log.studentNo || ""}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {log.actorEmail || "Unknown admin"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-foreground">
+                        {log.entityType}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {log.referenceNo || log.entityId || "—"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {log.reason || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </AdminShell>
   )

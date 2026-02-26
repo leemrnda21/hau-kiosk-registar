@@ -52,7 +52,7 @@ export default function RequestPage() {
     pickupTime: "",
     address: "",
   })
-  const [paymentMethod, setPaymentMethod] = useState("")
+  const [paymentMethod] = useState("paypal")
 
   const toggleDocument = (docId: string) => {
     if (selectedDocs.includes(docId)) {
@@ -101,46 +101,6 @@ export default function RequestPage() {
       deliveryDetails,
       paymentMethod,
       total: calculateTotal(),
-    }
-
-    if (paymentMethod === "pickup") {
-      try {
-        const response = await fetch("/api/requests", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            studentNo: requestData.studentNo,
-            documents: requestData.documents,
-            purpose: requestData.purpose,
-            deliveryMethod: requestData.deliveryMethod,
-            paymentMethod: "Cash on Pickup",
-            total: requestData.total,
-          }),
-        })
-
-        const data = await response.json()
-
-        if (!response.ok || !data.success) {
-          throw new Error(data.message || "Failed to submit request.")
-        }
-
-        const referenceNumber = data.requests?.[0]?.referenceNo || `REQ-${Date.now()}`
-        const receiptData = {
-          ...requestData,
-          referenceNumber,
-          paymentReference: `PAY-${Date.now()}`,
-          paymentMethod: "Cash on Pickup",
-          paymentDate: new Date().toISOString(),
-          status: "Pending Payment",
-        }
-
-        sessionStorage.setItem("receiptData", JSON.stringify(receiptData))
-        sessionStorage.removeItem("pendingRequest")
-        router.push(`/dashboard/track?ref=${encodeURIComponent(referenceNumber)}&new=1`)
-      } catch (error) {
-        console.error("Pickup submit error:", error)
-      }
-      return
     }
 
     sessionStorage.setItem("pendingRequest", JSON.stringify(requestData))
@@ -360,24 +320,10 @@ export default function RequestPage() {
               </div>
 
               <div className="space-y-3">
-                <button
-                  onClick={() => setPaymentMethod("online")}
-                  className={`w-full p-4 border rounded-lg text-left transition-colors ${
-                    paymentMethod === "online" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <p className="font-medium text-foreground">Pay Online</p>
-                  <p className="text-sm text-muted-foreground">Credit Card, Debit Card, or PayPal</p>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("pickup")}
-                  className={`w-full p-4 border rounded-lg text-left transition-colors ${
-                    paymentMethod === "pickup" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <p className="font-medium text-foreground">Pay on Pickup</p>
-                  <p className="text-sm text-muted-foreground">Cash payment at registrar office</p>
-                </button>
+                <div className="w-full p-4 border rounded-lg bg-primary/5 border-primary">
+                  <p className="font-medium text-foreground">Pay with PayPal</p>
+                  <p className="text-sm text-muted-foreground">Use your PayPal sandbox account for testing</p>
+                </div>
               </div>
             </div>
             <div className="mt-6 flex justify-between">
@@ -431,9 +377,7 @@ export default function RequestPage() {
 
               <div>
                 <h3 className="font-semibold text-foreground mb-2">Payment</h3>
-                <p className="text-sm text-muted-foreground">
-                  {paymentMethod === "online" ? "Pay Online" : "Pay on Pickup"}
-                </p>
+                <p className="text-sm text-muted-foreground">Pay with PayPal</p>
                 <p className="text-lg font-bold text-foreground mt-1">Total: PHP {calculateTotal()}.00</p>
               </div>
             </div>
