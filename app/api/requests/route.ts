@@ -49,11 +49,13 @@ const buildReferenceNo = (prefix: string) => {
   return `${prefix}-${year}-${random}`;
 };
 
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<RequestPayload>;
     const studentNo = body.studentNo?.trim();
     const documents = body.documents ?? [];
+    const paymentReference = body.paymentMethod ? `PAY-${Date.now()}` : null;
 
     if (!studentNo) {
       return NextResponse.json(
@@ -89,6 +91,7 @@ export async function POST(request: Request) {
         }
 
         const prefix = toReferencePrefix[mappedType] || "DOC";
+        const perDocumentTotal = (doc.price ?? 0) * (doc.copies ?? 1);
         return prisma.documentRequest.create({
           data: {
             studentId: student.id,
@@ -99,7 +102,8 @@ export async function POST(request: Request) {
             purpose: body.purpose,
             deliveryMethod: body.deliveryMethod,
             paymentMethod: body.paymentMethod,
-            totalAmount: body.total,
+            paymentReference: paymentReference,
+            totalAmount: perDocumentTotal,
           },
         });
       })

@@ -25,11 +25,17 @@ const documents = [
 
 const purposes = ["Employment", "Further Studies", "Scholarship Application", "Personal Records", "Other"]
 
+const steps = [
+  { id: "select", label: "Select" },
+  { id: "details", label: "Details" },
+  { id: "delivery", label: "Release Option" },
+  { id: "payment", label: "Payment" },
+  { id: "confirm", label: "Confirm" },
+]
+
 const deliveryMethods = [
-  { id: "pickup", name: "Pick-up at Registrar", description: "Available in 3-5 business days" },
-  { id: "mail", name: "Mail Delivery", description: "Additional 5-7 days for shipping" },
-  { id: "digital", name: "Digital Copy", description: "Available in 1-2 business days" },
-  { id: "kiosk-print", name: "Print at Kiosk", description: "Print immediately after payment" },
+  { id: "pickup", name: "Pick-up at Registrar", description: "Available after payment once approved by the registrar" },
+  { id: "digital", name: "Digital Copy", description: "Available after payment once approved by the registrar" },
 ]
 
 export default function RequestPage() {
@@ -129,7 +135,7 @@ export default function RequestPage() {
 
         sessionStorage.setItem("receiptData", JSON.stringify(receiptData))
         sessionStorage.removeItem("pendingRequest")
-        router.push("/dashboard/receipt")
+        router.push(`/dashboard/track?ref=${encodeURIComponent(referenceNumber)}&new=1`)
       } catch (error) {
         console.error("Pickup submit error:", error)
       }
@@ -159,27 +165,25 @@ export default function RequestPage() {
 
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8 overflow-x-auto pb-4">
-          {["select", "details", "delivery", "payment", "confirm"].map((s, index) => (
-            <div key={s} className="flex items-center">
+          {steps.map((s, index) => (
+            <div key={s.id} className="flex items-center">
               <div className="flex flex-col items-center">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    step === s
+                    step === s.id
                       ? "bg-primary text-primary-foreground"
-                      : ["select", "details", "delivery", "payment", "confirm"].indexOf(step) >
-                          ["select", "details", "delivery", "payment", "confirm"].indexOf(s)
+                      : steps.findIndex((item) => item.id === step) > steps.findIndex((item) => item.id === s.id)
                         ? "bg-green-500 text-white"
                         : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {["select", "details", "delivery", "payment", "confirm"].indexOf(step) >
-                  ["select", "details", "delivery", "payment", "confirm"].indexOf(s) ? (
+                  {steps.findIndex((item) => item.id === step) > steps.findIndex((item) => item.id === s.id) ? (
                     <Check className="w-5 h-5" />
                   ) : (
                     index + 1
                   )}
                 </div>
-                <span className="text-xs mt-2 text-muted-foreground capitalize">{s}</span>
+                <span className="text-xs mt-2 text-muted-foreground">{s.label}</span>
               </div>
               {index < 4 && <ChevronRight className="w-5 h-5 text-muted-foreground mx-2" />}
             </div>
@@ -274,7 +278,7 @@ export default function RequestPage() {
         {/* Step 3: Delivery Method */}
         {step === "delivery" && (
           <Card className="p-6">
-            <h2 className="text-xl font-bold text-foreground mb-4">Delivery Method</h2>
+            <h2 className="text-xl font-bold text-foreground mb-4">Release Option</h2>
             <div className="space-y-4">
               <div className="space-y-3">
                 {deliveryMethods.map((method) => (
@@ -316,17 +320,6 @@ export default function RequestPage() {
                 </div>
               )}
 
-              {deliveryMethod === "mail" && (
-                <div className="space-y-2 mt-4">
-                  <Label htmlFor="address">Delivery Address</Label>
-                  <Input
-                    id="address"
-                    placeholder="Enter complete address"
-                    value={deliveryDetails.address}
-                    onChange={(e) => setDeliveryDetails({ ...deliveryDetails, address: e.target.value })}
-                  />
-                </div>
-              )}
             </div>
             <div className="mt-6 flex justify-between">
               <Button variant="outline" onClick={() => setStep("details")}>
@@ -429,7 +422,7 @@ export default function RequestPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold text-foreground mb-2">Delivery</h3>
+                <h3 className="font-semibold text-foreground mb-2">Release Option</h3>
                 <p className="text-sm text-muted-foreground">
                   {deliveryMethods.find((m) => m.id === deliveryMethod)?.name}
                 </p>

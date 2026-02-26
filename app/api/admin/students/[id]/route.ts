@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { broadcastEvent } from "@/lib/sse-broker";
 
 export const runtime = "nodejs";
 
 type UpdatePayload = {
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "hold" | "release-hold" | "deactivate" | "reactivate";
+  reason?: string;
+  holdUntil?: string;
 };
 
 export async function PATCH(request: Request, context: { params: { id: string } }) {
@@ -21,10 +24,51 @@ export async function PATCH(request: Request, context: { params: { id: string } 
       );
     }
 
+    const updateData: Prisma.StudentUpdateInput =
+      action === "approve"
+        ? {
+            status: "Active",
+            isOnHold: false,
+            holdReason: null,
+            holdUntil: null,
+          }
+        : action === "reject"
+          ? { status: "Rejected" }
+          : action === "hold"
+            ? {
+                status: "Active",
+                isOnHold: true,
+                holdReason: body.reason?.trim() || null,
+                holdUntil: body.holdUntil ? new Date(body.holdUntil) : null,
+              }
+            : action === "release-hold"
+              ? {
+                  isOnHold: false,
+                  holdReason: null,
+                  holdUntil: null,
+                }
+              : action === "deactivate"
+              ? { isDeactivated: true, deactivatedAt: new Date() }
+              : action === "reactivate"
+                ? { isDeactivated: false, deactivatedAt: null }
+                : { status: "Rejected" };
+
     const updated = await prisma.student.update({
       where: { id },
+      data: updateData,
+    });
+
+    await prisma.adminAuditLog.create({
       data: {
-        status: action === "approve" ? "Active" : "Rejected",
+        actorEmail: request.headers.get("x-admin-email") || null,
+        action,
+        entityType: "student",
+        entityId: updated.id,
+        reason: body.reason?.trim() || null,
+        metadata: {
+          studentNo: updated.studentNo,
+          holdUntil: body.holdUntil || null,
+        },
       },
     });
 

@@ -2,21 +2,21 @@
 
 import { useMemo, useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { ArrowLeft, Download, FileText, Calendar, ExternalLink, Printer, Filter } from "lucide-react"
+import { ArrowLeft, Mail, FileText, Calendar, ExternalLink, Printer, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import type { DocumentStatus } from "@/lib/demo-documents"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { sendEmailWithPDF, formatDocumentForEmail } from "@/lib/email-service"
 
 export default function DownloadsPage() {
-  const router = useRouter()
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | "all">("all")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [previewDoc, setPreviewDoc] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<{ email: string; fullName: string; studentNumber: string } | null>(null)
   const [emailStatus, setEmailStatus] = useState<string>("")
+  const [emailingDoc, setEmailingDoc] = useState<string | null>(null)
+  const [emailRecipient, setEmailRecipient] = useState("")
   const [documents, setDocuments] = useState<
     Array<{
       id: string
@@ -117,68 +117,40 @@ export default function DownloadsPage() {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ")
 
-  const handlePrint = async (docId: string) => {
+  const handleSendEmail = async (docId: string) => {
     const doc = documents.find((d) => d.id === docId)
-    if (!doc) return
+    if (!doc || !currentUser?.studentNumber) {
+      return
+    }
+    const recipient = emailRecipient.trim()
+    if (!recipient) {
+      setEmailStatus("✗ Please enter a recipient email.")
+      return
+    }
 
-    // Send email with PDF after printing
-    if (currentUser) {
-      setEmailStatus("Sending document to email...")
-      const emailBody = formatDocumentForEmail(currentUser.fullName, formatDocumentType(doc.type), "")
-      const result = await sendEmailWithPDF({
-        to: currentUser.email,
-        subject: `Your ${formatDocumentType(doc.type)} from Holy Angel University`,
-        body: emailBody,
-        documentName: `${formatDocumentType(doc.type).replace(/\s+/g, '_')}.pdf`,
-        documentContent: "",
+    setEmailingDoc(docId)
+    setEmailStatus("Sending document to email...")
+    try {
+      const response = await fetch(`/api/documents/${docId}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: recipient,
+          studentNo: currentUser.studentNumber,
+        }),
       })
-      
-      setEmailStatus(result.success ? `✓ ${result.message}` : `✗ ${result.message}`)
-      setTimeout(() => setEmailStatus(""), 5000)
-    }
-
-    // Store document info for payment
-    const printRequest = {
-      documents: [
-        {
-          id: doc.id,
-          name: formatDocumentType(doc.type),
-          price: 50,
-          copies: 1,
-        },
-      ],
-      purpose: "Print Document",
-      deliveryMethod: "Print at Kiosk",
-      total: 50,
-      documentToPrint: doc.id,
-    }
-
-    sessionStorage.setItem("pendingRequest", JSON.stringify(printRequest))
-    router.push("/dashboard/payment")
-  }
-
-  const handleDownload = async (docId: string, docName: string) => {
-    // Send email with PDF when downloading
-    if (currentUser) {
-      setEmailStatus("Sending document to email...")
-      const doc = documents.find((d) => d.id === docId)
-      if (doc) {
-        const emailBody = formatDocumentForEmail(currentUser.fullName, docName, "")
-        const result = await sendEmailWithPDF({
-          to: currentUser.email,
-          subject: `Your ${docName} from Holy Angel University`,
-          body: emailBody,
-          documentName: `${docName.replace(/\s+/g, '_')}.pdf`,
-          documentContent: "",
-        })
-        
-        setEmailStatus(result.success ? `✓ ${result.message}` : `✗ ${result.message}`)
-        setTimeout(() => setEmailStatus(""), 5000)
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to send email")
       }
+      setEmailStatus(`✓ ${data.message || "Email sent."}`)
+      setTimeout(() => setEmailStatus(""), 5000)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to send email"
+      setEmailStatus(`✗ ${message}`)
+    } finally {
+      setEmailingDoc(null)
     }
-    
-    // Simulate download
-    window.open(`/api/documents/${docId}/download`, "_blank")
   }
 
   return (
@@ -226,7 +198,7 @@ export default function DownloadsPage() {
           )}
 
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-bold text-foreground">Available Documents</h1>
+            <h1 className="text-3xl font-bold text-foreground">Ready Documents</h1>
 
             <div className="flex gap-2 items-center">
               <Filter className="w-4 h-4 text-muted-foreground" />
@@ -270,8 +242,8 @@ export default function DownloadsPage() {
           ) : filteredDocuments.length === 0 ? (
             <Card className="p-12 text-center">
               <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-foreground mb-2">No documents found</h3>
-              <p className="text-muted-foreground mb-6">Try adjusting your filters or request a new document</p>
+              <h3 className="text-xl font-semibold text-foreground mb-2">No ready documents</h3>
+              <p className="text-muted-foreground mb-6">Track requests while the registrar processes them</p>
               <Button asChild>
                 <Link href="/dashboard/request">Request New Document</Link>
               </Button>
@@ -320,20 +292,44 @@ export default function DownloadsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-2 no-print">
-                      <Button size="sm" variant="outline" onClick={() => setPreviewDoc(doc.id)}>
+                    <div className="flex flex-col gap-2 no-print">
+                      {doc.status === "ready" && (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="Recipient email"
+                            value={emailRecipient}
+                            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                              setEmailRecipient(event.target.value)
+                            }
+                            className="w-64"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSendEmail(doc.id)}
+                            disabled={emailingDoc === doc.id}
+                          >
+                            <Mail className="w-4 h-4 mr-2" />
+                            {emailingDoc === doc.id ? "Sending..." : "Send Email"}
+                          </Button>
+                        </div>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPreviewDoc(doc.id)}
+                        disabled={doc.status !== "ready"}
+                      >
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Preview
                       </Button>
                       {doc.status === "ready" && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => handlePrint(doc.id)}>
-                            <Printer className="w-4 h-4 mr-2" />
-                            Print (PHP 50)
-                          </Button>
-                          <Button size="sm" onClick={() => handleDownload(doc.id, formatDocumentType(doc.type))}>
-                            <Download className="w-4 h-4 mr-2" />
-                            Download
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/dashboard/print?requestId=${encodeURIComponent(doc.id)}&auto=1`}>
+                              <Printer className="w-4 h-4 mr-2" />
+                              Print (PHP 50)
+                            </Link>
                           </Button>
                         </>
                       )}
@@ -358,7 +354,7 @@ export default function DownloadsPage() {
         </main>
       </div>
 
-      {selectedDoc && previewDoc && (
+      {selectedDoc && previewDoc && selectedDoc.status === "ready" && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden"
           onClick={() => setPreviewDoc(null)}
@@ -370,9 +366,11 @@ export default function DownloadsPage() {
             <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-center">
               <h2 className="font-semibold text-lg">Document Preview</h2>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => handlePrint(selectedDoc.id)}>
-                  <Printer className="w-4 h-4 mr-2" />
-                  Print (PHP 50)
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/dashboard/print?requestId=${encodeURIComponent(selectedDoc.id)}&auto=1`}>
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print (PHP 50)
+                  </Link>
                 </Button>
                 <Button size="sm" onClick={() => setPreviewDoc(null)}>
                   Close

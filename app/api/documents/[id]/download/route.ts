@@ -31,6 +31,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       );
     }
 
+    if (request.status !== "ready") {
+      return NextResponse.json(
+        { success: false, message: "Document is not available for download." },
+        { status: 403 }
+      );
+    }
+
     const pdfBytes = await generateDocumentPdf(request.student, {
       id: request.id,
       referenceNo: request.referenceNo,

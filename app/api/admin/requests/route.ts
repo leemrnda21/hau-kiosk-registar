@@ -7,12 +7,24 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status")?.trim();
+    const needsVerification = searchParams.get("needsVerification")?.trim();
+    const requestId = searchParams.get("requestId")?.trim();
     const statusFilter = status
       ? (status as "pending" | "processing" | "submitted" | "ready" | "rejected")
       : undefined;
 
     const requests = await prisma.documentRequest.findMany({
-      where: statusFilter ? { status: statusFilter } : undefined,
+      where: {
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(requestId ? { id: requestId } : {}),
+        ...(needsVerification === "true"
+          ? {
+              paymentVerifiedAt: null,
+              paymentMethod: { not: null },
+              status: { in: ["pending", "processing"] },
+            }
+          : {}),
+      },
       orderBy: { requestedAt: "desc" },
       include: {
         student: {

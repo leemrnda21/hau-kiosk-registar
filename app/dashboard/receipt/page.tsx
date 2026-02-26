@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { CheckCircle2, Download, Printer, Home, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -11,28 +11,95 @@ import { PrintableDocument } from "@/components/printable-document"
 
 export default function ReceiptPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [receiptData, setReceiptData] = useState<any>(null)
   const [kioskPrinting, setKioskPrinting] = useState(false)
   const [documentToPrint, setDocumentToPrint] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const requestId = searchParams.get("requestId")
+  const mode = searchParams.get("mode")
+  const fallbackPath = mode === "admin" ? "/admin/receipts" : "/dashboard"
 
   useEffect(() => {
-    const data = sessionStorage.getItem("receiptData")
-    if (!data) {
-      router.push("/dashboard")
-      return
-    }
-    const parsedData = JSON.parse(data)
-    setReceiptData(parsedData)
+    const loadReceipt = async () => {
+      try {
+        if (requestId) {
+          const userString = sessionStorage.getItem("currentUser")
+          const currentUser = userString ? JSON.parse(userString) : null
 
-    if (parsedData.documentToPrint) {
-      const doc = demoDocuments.find((d) => d.id === parsedData.documentToPrint)
-      if (doc) {
-        setDocumentToPrint(doc)
+          const url = new URL("/api/dashboard/requests", window.location.origin)
+          if (mode === "admin") {
+            url.pathname = "/api/admin/requests"
+            url.searchParams.set("requestId", requestId)
+          } else if (currentUser?.studentNumber) {
+            url.searchParams.set("studentNo", currentUser.studentNumber)
+            url.searchParams.set("requestId", requestId)
+          }
+
+          if (!url.searchParams.get("requestId") || (!url.searchParams.get("studentNo") && mode !== "admin")) {
+            router.push(fallbackPath)
+            return
+          }
+
+          const response = await fetch(url)
+          const data = await response.json()
+          if (!response.ok || !data.success || !data.requests?.length) {
+            router.push(fallbackPath)
+            return
+          }
+
+          const requestRecord = data.requests[0]
+          setReceiptData({
+            referenceNumber: requestRecord.referenceNo,
+            paymentReference: requestRecord.paymentReference || "--",
+            receiptNumber: requestRecord.receiptNo || "Pending",
+            paymentApprovedAt: requestRecord.paymentApprovedAt || null,
+            paymentDate: requestRecord.requestedAt,
+            status: requestRecord.status === "pending" ? "Pending Payment" : "Paid",
+            purpose: requestRecord.purpose || "--",
+            deliveryMethod: requestRecord.deliveryMethod || "--",
+            paymentMethod: requestRecord.paymentMethod || "--",
+            total: requestRecord.totalAmount || 0,
+            documents: [
+              {
+                name: formatDocumentType(requestRecord.type),
+                copies: requestRecord.copies,
+                price: requestRecord.totalAmount || 0,
+              },
+            ],
+          })
+        } else {
+          const data = sessionStorage.getItem("receiptData")
+          if (!data) {
+            router.push(fallbackPath)
+            return
+          }
+          const parsedData = JSON.parse(data)
+          setReceiptData(parsedData)
+        }
+      } catch (error) {
+        console.error("Receipt load error:", error)
+        router.push(fallbackPath)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadReceipt()
+
+    const data = sessionStorage.getItem("receiptData")
+    if (data) {
+      const parsedData = JSON.parse(data)
+      if (parsedData.documentToPrint) {
+        const doc = demoDocuments.find((d) => d.id === parsedData.documentToPrint)
+        if (doc) {
+          setDocumentToPrint(doc)
+        }
       }
     }
 
     const shouldPrintKiosk = sessionStorage.getItem("shouldPrintKiosk")
-    if (shouldPrintKiosk === "true" || parsedData.documentToPrint) {
+    if (shouldPrintKiosk === "true") {
       setKioskPrinting(true)
       setTimeout(() => {
         window.print()
@@ -40,7 +107,14 @@ export default function ReceiptPage() {
         setKioskPrinting(false)
       }, 1000)
     }
-  }, [router])
+  }, [router, requestId, mode])
+
+  const formatDocumentType = (value: string) => {
+    return value
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  }
 
   const handlePrint = () => {
     window.print()
@@ -76,6 +150,10 @@ Thank you for your request!
     a.download = `receipt-${receiptData?.referenceNumber}.txt`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  if (!receiptData && isLoading) {
+    return null
   }
 
   if (!receiptData) {
@@ -187,7 +265,11 @@ Thank you for your request!
               <p className="text-xs text-muted-foreground mt-1">Official Receipt</p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4 mb-6">
+            <div className="grid md:grid-cols-3 gap-4 mb-6">
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">Official Receipt No.</p>
+                <p className="font-mono font-bold text-foreground">{receiptData.receiptNumber || "Pending"}</p>
+              </div>
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-xs text-muted-foreground mb-1">Reference Number</p>
                 <p className="font-mono font-bold text-foreground">{receiptData.referenceNumber}</p>
@@ -207,6 +289,20 @@ Thank you for your request!
                 <p className="text-muted-foreground">Status</p>
                 <p className={`font-medium ${receiptData.status === "Paid" ? "text-green-600" : "text-amber-600"}`}>
                   {receiptData.status}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Approved By</p>
+                <p className="font-medium text-foreground">
+                  {receiptData.paymentApprovedAt ? "Registrar Office" : "Pending Approval"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Approved Date</p>
+                <p className="font-medium text-foreground">
+                  {receiptData.paymentApprovedAt
+                    ? new Date(receiptData.paymentApprovedAt).toLocaleString()
+                    : "--"}
                 </p>
               </div>
             </div>

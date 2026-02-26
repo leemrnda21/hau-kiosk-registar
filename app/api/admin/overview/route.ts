@@ -8,40 +8,61 @@ export async function GET() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [pendingRequests, approvedToday, rejectedToday, pendingStudents, recentRequests] =
-      await Promise.all([
-        prisma.documentRequest.count({
-          where: { status: "pending" },
-        }),
-        prisma.documentRequest.count({
-          where: {
-            status: "processing",
-            requestedAt: { gte: today },
-          },
-        }),
-        prisma.documentRequest.count({
-          where: {
-            status: "submitted",
-            requestedAt: { gte: today },
-          },
-        }),
-        prisma.student.count({
-          where: { status: "Pending" },
-        }),
-        prisma.documentRequest.findMany({
-          orderBy: { requestedAt: "desc" },
-          take: 5,
-          include: {
-            student: {
-              select: {
-                studentNo: true,
-                firstName: true,
-                lastName: true,
-              },
+    const [
+      pendingRequests,
+      approvedToday,
+      rejectedToday,
+      pendingStudents,
+      recentRequests,
+      onHoldRequests,
+      onHoldStudents,
+      unverifiedPayments,
+    ] = await Promise.all([
+      prisma.documentRequest.count({
+        where: { status: "pending" },
+      }),
+      prisma.documentRequest.count({
+        where: {
+          status: "processing",
+          requestedAt: { gte: today },
+        },
+      }),
+      prisma.documentRequest.count({
+        where: {
+          status: "submitted",
+          requestedAt: { gte: today },
+        },
+      }),
+      prisma.student.count({
+        where: { status: "Pending" },
+      }),
+      prisma.documentRequest.findMany({
+        orderBy: { requestedAt: "desc" },
+        take: 5,
+        include: {
+          student: {
+            select: {
+              studentNo: true,
+              firstName: true,
+              lastName: true,
             },
           },
-        }),
-      ]);
+        },
+      }),
+      prisma.documentRequest.count({
+        where: { isOnHold: true },
+      }),
+      prisma.student.count({
+        where: { isOnHold: true },
+      }),
+      prisma.documentRequest.count({
+        where: {
+          paymentVerifiedAt: null,
+          paymentMethod: { not: null },
+          status: { in: ["pending", "processing"] },
+        },
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -50,6 +71,9 @@ export async function GET() {
         approvedToday,
         rejectedToday,
         pendingStudents,
+        onHoldRequests,
+        onHoldStudents,
+        unverifiedPayments,
       },
       recentRequests,
     });

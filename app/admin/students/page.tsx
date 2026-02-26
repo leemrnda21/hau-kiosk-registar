@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Users, CheckCircle2, XCircle, UserPlus } from "lucide-react"
+import { Users, CheckCircle2, XCircle, UserPlus, PauseCircle, Ban } from "lucide-react"
 
 type StudentRow = {
   id: string
@@ -18,6 +18,11 @@ type StudentRow = {
   course?: string | null
   yearLevel?: string | null
   status: string
+  isOnHold?: boolean | null
+  holdReason?: string | null
+  holdUntil?: string | null
+  isDeactivated?: boolean | null
+  deactivatedAt?: string | null
   createdAt: string
 }
 
@@ -27,6 +32,10 @@ export default function AdminStudentsPage() {
   const [search, setSearch] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [holdStudent, setHoldStudent] = useState<StudentRow | null>(null)
+  const [holdReason, setHoldReason] = useState("")
+  const [holdUntil, setHoldUntil] = useState("")
+  const [isHolding, setIsHolding] = useState(false)
 
   const [adminEmail, setAdminEmail] = useState("")
   const [adminFirstName, setAdminFirstName] = useState("")
@@ -39,7 +48,15 @@ export default function AdminStudentsPage() {
     try {
       const url = new URL("/api/admin/students", window.location.origin)
       if (filter !== "all") {
-        url.searchParams.set("status", filter)
+        if (filter === "On Hold") {
+          url.searchParams.set("status", "Active")
+          url.searchParams.set("onHold", "true")
+        } else if (filter === "Deactivated") {
+          url.searchParams.set("status", "Active")
+          url.searchParams.set("deactivated", "true")
+        } else {
+          url.searchParams.set("status", filter)
+        }
       }
       const response = await fetch(url)
       const data = await response.json()
@@ -72,7 +89,10 @@ export default function AdminStudentsPage() {
     }
   }, [filter])
 
-  const handleAction = async (id: string, action: "approve" | "reject") => {
+  const handleAction = async (
+    id: string,
+    action: "approve" | "reject" | "hold" | "release-hold" | "deactivate" | "reactivate"
+  ) => {
     setIsUpdating(true)
     try {
       const response = await fetch(`/api/admin/students/${id}`, {
@@ -89,6 +109,36 @@ export default function AdminStudentsPage() {
       console.error("Student action error:", error)
     } finally {
       setIsUpdating(false)
+    }
+  }
+
+  const submitHold = async () => {
+    if (!holdStudent) {
+      return
+    }
+    setIsHolding(true)
+    try {
+      const response = await fetch(`/api/admin/students/${holdStudent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "hold",
+          reason: holdReason,
+          holdUntil: holdUntil || undefined,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        return
+      }
+      setHoldStudent(null)
+      setHoldReason("")
+      setHoldUntil("")
+      loadStudents()
+    } catch (error) {
+      console.error("Student hold error:", error)
+    } finally {
+      setIsHolding(false)
     }
   }
 
@@ -210,18 +260,20 @@ export default function AdminStudentsPage() {
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter status" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="Pending">Pending</SelectItem>
-              <SelectItem value="Active">Active</SelectItem>
-              <SelectItem value="Rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </Card>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="Pending">Pending</SelectItem>
+            <SelectItem value="Active">Active</SelectItem>
+            <SelectItem value="On Hold">On Hold</SelectItem>
+            <SelectItem value="Deactivated">Deactivated</SelectItem>
+            <SelectItem value="Rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </Card>
 
-      <div className="space-y-4">
-        {isLoading ? (
+        <div className="space-y-4">
+          {isLoading ? (
           <Card className="p-6">
             <p className="text-sm text-muted-foreground">Loading students...</p>
           </Card>
@@ -242,6 +294,12 @@ export default function AdminStudentsPage() {
                   <p className="text-xs text-muted-foreground">
                     {student.course || ""} {student.yearLevel ? `• ${student.yearLevel}` : ""}
                   </p>
+                  {student.isOnHold && (
+                    <p className="text-xs text-amber-700">On Hold: {student.holdReason || "No reason provided"}</p>
+                  )}
+                  {student.isDeactivated && (
+                    <p className="text-xs text-rose-600">Deactivated</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -252,6 +310,37 @@ export default function AdminStudentsPage() {
                   >
                     <CheckCircle2 className="w-4 h-4 mr-2" />
                     Approve
+                  </Button>
+                  {student.isOnHold ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAction(student.id, "release-hold")}
+                      disabled={isUpdating}
+                    >
+                      Release Hold
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setHoldStudent(student)}
+                      disabled={isUpdating}
+                    >
+                      <PauseCircle className="w-4 h-4 mr-2" />
+                      Hold
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      handleAction(student.id, student.isDeactivated ? "reactivate" : "deactivate")
+                    }
+                    disabled={isUpdating}
+                  >
+                    <Ban className="w-4 h-4 mr-2" />
+                    {student.isDeactivated ? "Reactivate" : "Deactivate"}
                   </Button>
                   <Button
                     size="sm"
@@ -268,6 +357,50 @@ export default function AdminStudentsPage() {
           ))
         )}
       </div>
+
+      {holdStudent && (
+        <Card className="p-6 mt-6">
+          <h4 className="font-semibold text-foreground mb-3">Hold Student Account</h4>
+          <p className="text-sm text-muted-foreground mb-4">
+            {holdStudent.firstName} {holdStudent.lastName} ({holdStudent.studentNo})
+          </p>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="studentHoldReason">Reason</Label>
+              <Input
+                id="studentHoldReason"
+                placeholder="Pending document verification"
+                value={holdReason}
+                onChange={(event) => setHoldReason(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="studentHoldUntil">Hold Until (optional)</Label>
+              <Input
+                id="studentHoldUntil"
+                type="date"
+                value={holdUntil}
+                onChange={(event) => setHoldUntil(event.target.value)}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button onClick={submitHold} disabled={isHolding}>
+              {isHolding ? "Applying..." : "Apply Hold"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setHoldStudent(null)
+                setHoldReason("")
+                setHoldUntil("")
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </Card>
+      )}
     </AdminShell>
   )
 }

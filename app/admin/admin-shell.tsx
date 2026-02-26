@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { User, LogOut, LayoutGrid, FileText, Users } from "lucide-react"
+import { User, LogOut, LayoutGrid, FileText, Users, Receipt, ClipboardList } from "lucide-react"
 
 type AdminShellProps = {
   title: string
@@ -14,6 +14,8 @@ type AdminShellProps = {
 const navItems = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutGrid },
   { label: "Manage Document Request", href: "/admin/requests", icon: FileText },
+  { label: "Receipts", href: "/admin/receipts", icon: Receipt },
+  { label: "Audit Log", href: "/admin/audit-log", icon: ClipboardList },
   { label: "Manage Student Accounts", href: "/admin/students", icon: Users },
 ]
 

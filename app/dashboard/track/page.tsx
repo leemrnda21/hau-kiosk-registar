@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Search, CheckCircle2, Clock, Package, Truck } from "lucide-react"
+import { ArrowLeft, Search, CheckCircle2, Clock, Package, Truck, Receipt } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -53,6 +53,12 @@ export default function TrackPage() {
 
     loadRequests()
   }, [searchRef])
+
+  useEffect(() => {
+    if (refNumber) {
+      setSearchRef(refNumber)
+    }
+  }, [refNumber])
 
   useEffect(() => {
     const userString = sessionStorage.getItem("currentUser")
@@ -246,7 +252,7 @@ export default function TrackPage() {
           ) : (
             requests.map((request) => (
               <Card key={request.referenceNo} className="p-6">
-                <div className="flex items-start justify-between mb-6">
+                <div className="flex items-start justify-between mb-6 gap-4">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       {getStatusIcon(request.status)}
@@ -259,6 +265,17 @@ export default function TrackPage() {
                   </div>
                   <p className="text-sm text-muted-foreground">{formatDate(request.requestedAt)}</p>
                 </div>
+
+                {(request.status === "processing" || request.status === "ready" || request.status === "submitted") && (
+                  <div className="mb-6">
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={`/dashboard/receipt?requestId=${encodeURIComponent(request.id)}`}>
+                        <Receipt className="w-4 h-4 mr-2" />
+                        View Receipt
+                      </Link>
+                    </Button>
+                  </div>
+                )}
 
                 {/* Timeline */}
                 <div className="space-y-4">

@@ -35,6 +35,7 @@ export default function VoiceModePage() {
   const [pendingEmail, setPendingEmail] = useState<string>("")
   const [isMuted, setIsMuted] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [authError, setAuthError] = useState("")
   const recognitionRef = useRef<any>(null)
   const synthRef = useRef<SpeechSynthesis | null>(null)
   const handleUserSpeechRef = useRef<(text: string) => void>(() => undefined)
@@ -258,6 +259,43 @@ export default function VoiceModePage() {
     const lowerText = text.toLowerCase()
     const activeStep = step
 
+    const isProfanity = /(\bf+u+c+k\b|\bshit\b|\bbitch\b|\bson of a\b|\basshole\b|\bbastard\b|\bdamn\b)/i.test(
+      lowerText
+    )
+
+    if (isProfanity && activeStep !== "password-input") {
+      setAuthError("")
+      speak("I will pretend I did not hear that. Try a nicer password, or a nicer mood.")
+      return
+    }
+
+    if (lowerText.includes("start over") || lowerText.includes("reset")) {
+      resetConversation()
+      return
+    }
+
+    if (activeStep === "password-input") {
+      if (lowerText.includes("try again") || lowerText === "try") {
+        setAuthError("")
+        setStatusMessage("")
+        speak("Okay. Please say your password again.")
+        return
+      }
+      if (lowerText.includes("change email") || lowerText.includes("new email") || lowerText === "email") {
+        setPendingEmail("")
+        setAuthError("")
+        setStep("email-input")
+        speak("Okay. Please say your email username again, like vbmiranda.")
+        return
+      }
+      if (lowerText.includes("back")) {
+        setAuthError("")
+        setStep("email-input")
+        speak("Going back. Please say your email username again.")
+        return
+      }
+    }
+
     switch (activeStep) {
       case "welcome":
       case "auth-choice": {
@@ -280,6 +318,7 @@ export default function VoiceModePage() {
       }
 
       case "email-input": {
+        setAuthError("")
         const normalizedEmail = normalizeEmailFromSpeech(text)
         if (!normalizedEmail) {
           speak("I didn't catch that. Please say your email username, like vbmiranda.")
@@ -294,6 +333,7 @@ export default function VoiceModePage() {
 
       case "email-confirm":
         if (lowerText.includes("yes")) {
+          setAuthError("")
           setStep("password-input")
           speak("Thank you. Now please say your password.")
         } else if (lowerText.includes("no")) {
@@ -344,7 +384,10 @@ export default function VoiceModePage() {
               setStep("welcome")
               break
             }
-            speak(data.message || "Incorrect password. Please try again.")
+            setAuthError("Invalid email or password.")
+            speak(
+              "Invalid email or password. Say 'try again' to re-enter your password or say 'change email' to re-enter your email."
+            )
             setStep("password-input")
             break
           }
@@ -361,6 +404,7 @@ export default function VoiceModePage() {
 
           setStep("authenticated")
           setIsVerifying(false)
+          setAuthError("")
           speak("Authentication successful! Welcome. Redirecting to your dashboard.")
           setTimeout(() => {
             router.push("/dashboard")
@@ -368,7 +412,10 @@ export default function VoiceModePage() {
         } catch (error) {
           setIsVerifying(false)
           setStatusMessage("")
-          speak("Login failed. Please try again.")
+          setAuthError("Login failed. Please try again.")
+          speak(
+            "Login failed. Say 'try again' to re-enter your password or say 'change email' to re-enter your email."
+          )
           setStep("password-input")
         }
         break
@@ -396,6 +443,10 @@ export default function VoiceModePage() {
           setPendingStudentNumber("")
           setStep("student-number")
           speak("Let's try again. Please say your student number clearly.")
+        } else if (lowerText.includes("back")) {
+          setPendingStudentNumber("")
+          setStep("student-number")
+          speak("Going back. Please say your student number clearly.")
         } else {
           speak(`Please say 'yes' to confirm your student number (${pendingStudentNumber}) or 'no' to retry.`)
         }
@@ -447,6 +498,7 @@ export default function VoiceModePage() {
     setStep("welcome")
     setTranscript("")
     setStatusMessage("")
+    setAuthError("")
     sessionActiveRef.current = false
     retryCountRef.current = 0
     listenStartRef.current = null
@@ -529,6 +581,15 @@ export default function VoiceModePage() {
             {transcript ? <p className="text-foreground">{transcript}</p> : null}
             {statusMessage ? <p className="text-foreground">{statusMessage}</p> : null}
             {isVerifying ? <p className="text-foreground">Checking credentials...</p> : null}
+          </Card>
+        )}
+
+        {authError && (
+          <Card className="p-4 mb-6 border-red-500/50 bg-red-500/10">
+            <p className="text-sm text-red-700">{authError}</p>
+            <p className="text-xs text-red-700 mt-1">
+              Say “try again” to re-enter your password or “change email” to re-enter your email.
+            </p>
           </Card>
         )}
 

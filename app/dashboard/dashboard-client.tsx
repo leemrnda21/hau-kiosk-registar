@@ -349,10 +349,14 @@ export default function DashboardClient() {
                       </div>
                     </div>
                     {request.status === "ready" ? (
-                      <Button size="sm">Download</Button>
+                      <Button size="sm" asChild>
+                        <Link href="/dashboard/downloads">Send Email / Print</Link>
+                      </Button>
                     ) : (
-                      <Button size="sm" variant="outline">
-                        Track
+                      <Button size="sm" variant="outline" asChild>
+                        <Link href={`/dashboard/track?ref=${encodeURIComponent(request.referenceNo)}`}>
+                          Track
+                        </Link>
                       </Button>
                     )}
                   </div>

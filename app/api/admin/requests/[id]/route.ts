@@ -1,12 +1,23 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { broadcastEvent } from "@/lib/sse-broker";
 
 export const runtime = "nodejs";
 
 type UpdatePayload = {
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "hold" | "release" | "verify-payment" | "mark-ready";
+  reason?: string;
+  holdUntil?: string;
 };
+
+const buildReceiptNo = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const random = Math.floor(1000 + Math.random() * 9000);
+  return `OR-${year}-${random}`;
+};
+
 
 export async function PATCH(request: Request, context: { params: { id: string } }) {
   try {
@@ -21,10 +32,68 @@ export async function PATCH(request: Request, context: { params: { id: string } 
       );
     }
 
+    const existing = await prisma.documentRequest.findUnique({
+      where: { id },
+      select: { id: true, status: true, receiptNo: true, studentId: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, message: "Request not found." },
+        { status: 404 }
+      );
+    }
+
+    const data: Prisma.DocumentRequestUpdateInput =
+      action === "approve"
+        ? {
+            status: "processing",
+            paymentApprovedAt: new Date(),
+            receiptNo: existing.receiptNo || buildReceiptNo(),
+          }
+        : action === "reject"
+          ? { status: "rejected" }
+          : action === "hold"
+            ? {
+                isOnHold: true,
+                holdReason: body.reason?.trim() || null,
+                holdUntil: body.holdUntil ? new Date(body.holdUntil) : null,
+              }
+            : action === "release"
+              ? {
+                  isOnHold: false,
+                  holdReason: null,
+                  holdUntil: null,
+                }
+              : action === "verify-payment"
+                ? {
+                    paymentVerifiedAt: new Date(),
+                    paymentVerificationNote: body.reason?.trim() || null,
+                    ...(existing.status === "pending" ? { status: "processing" } : {}),
+                  }
+                : action === "mark-ready"
+                  ? {
+                      status: "ready",
+                      completedAt: new Date(),
+                    }
+                  : { status: "rejected" };
+
     const updated = await prisma.documentRequest.update({
       where: { id },
+      data,
+    });
+
+    await prisma.adminAuditLog.create({
       data: {
-        status: action === "approve" ? "processing" : "rejected",
+        actorEmail: request.headers.get("x-admin-email") || null,
+        action,
+        entityType: "request",
+        entityId: updated.id,
+        reason: body.reason?.trim() || null,
+        metadata: {
+          referenceNo: updated.referenceNo,
+          holdUntil: body.holdUntil || null,
+        },
       },
     });
 

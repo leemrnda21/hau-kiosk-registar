@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const studentNo = searchParams.get("studentNo")?.trim();
     const referenceNo = searchParams.get("referenceNo")?.trim();
+    const requestId = searchParams.get("requestId")?.trim();
 
     if (!studentNo) {
       return NextResponse.json(
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
     const requests = await prisma.documentRequest.findMany({
       where: {
         studentId: student.id,
+        ...(requestId ? { id: requestId } : {}),
         ...(referenceNo ? { referenceNo } : {}),
       },
       orderBy: { requestedAt: "desc" },

@@ -86,8 +86,8 @@ export default function PaymentPage() {
 
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      const refNumber = `REQ-${Date.now()}`
-      const paymentRef = `PAY-${Date.now()}`
+      const refNumber = data.requests?.[0]?.referenceNo || `REQ-${Date.now()}`
+      const paymentRef = data.requests?.[0]?.paymentReference || `PAY-${Date.now()}`
 
       const receiptData = {
         ...requestData,
@@ -105,7 +105,9 @@ export default function PaymentPage() {
         sessionStorage.setItem("shouldPrintKiosk", "true")
       }
 
-      router.push("/dashboard/receipt")
+      router.push(
+        `/dashboard/track?ref=${encodeURIComponent(refNumber)}&new=1`
+      )
     } catch (error) {
       console.error("Payment submit error:", error)
       setProcessing(false)

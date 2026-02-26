@@ -26,6 +26,11 @@ model Student {
   phone       String?
   address     String?
   status      String       @default("Pending")
+  isOnHold    Boolean      @default(false)
+  holdReason  String?
+  holdUntil   DateTime?
+  isDeactivated Boolean    @default(false)
+  deactivatedAt DateTime?
   enrollments Enrollment[]
   faceEnrollment FaceEnrollment?
   documentRequests DocumentRequest[]
@@ -115,7 +120,27 @@ model DocumentRequest {
   purpose     String?
   deliveryMethod String?
   paymentMethod String?
+  paymentReference String?
+  receiptNo   String?        @unique
+  paymentApprovedAt DateTime?
+  paymentVerifiedAt DateTime?
+  paymentVerificationNote String?
+  isOnHold    Boolean        @default(false)
+  holdReason  String?
+  holdUntil   DateTime?
   totalAmount Int?
   updatedAt   DateTime       @updatedAt
   @@index([status, requestedAt])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorEmail String?
+  action     String
+  entityType String
+  entityId   String?
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  @@index([createdAt])
 }

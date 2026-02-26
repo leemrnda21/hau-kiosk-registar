@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react"
 import AdminShell from "../admin-shell"
 import { Card } from "@/components/ui/card"
-import { FileText, Users, Clock, CheckCircle2 } from "lucide-react"
+import { FileText, Users, Clock, CheckCircle2, PauseCircle, ShieldCheck } from "lucide-react"
 
 type DashboardStats = {
   pendingRequests: number
   approvedToday: number
   rejectedToday: number
   pendingStudents: number
+  onHoldRequests: number
+  onHoldStudents: number
+  unverifiedPayments: number
 }
 
 type RecentRequest = {
@@ -31,6 +34,9 @@ export default function AdminDashboardPage() {
     approvedToday: 0,
     rejectedToday: 0,
     pendingStudents: 0,
+    onHoldRequests: 0,
+    onHoldStudents: 0,
+    unverifiedPayments: 0,
   })
   const [recentRequests, setRecentRequests] = useState<RecentRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -76,7 +82,7 @@ export default function AdminDashboardPage() {
   return (
     <AdminShell
       title="Admin Dashboard"
-      subtitle="Monitor requests, approvals, and student onboarding in real time."
+      subtitle="Monitor requests, approvals, holds, and onboarding in real time."
     >
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <Card className="p-6">
@@ -121,6 +127,42 @@ export default function AdminDashboardPage() {
               </p>
             </div>
             <Users className="w-10 h-10 text-blue-500" />
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Requests On Hold</p>
+              <p className="text-3xl font-bold text-foreground">
+                {loading ? "--" : stats.onHoldRequests}
+              </p>
+            </div>
+            <PauseCircle className="w-10 h-10 text-amber-500" />
+          </div>
+        </Card>
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Students On Hold</p>
+              <p className="text-3xl font-bold text-foreground">
+                {loading ? "--" : stats.onHoldStudents}
+              </p>
+            </div>
+            <Users className="w-10 h-10 text-amber-500" />
+          </div>
+        </Card>
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Unverified Payments</p>
+              <p className="text-3xl font-bold text-foreground">
+                {loading ? "--" : stats.unverifiedPayments}
+              </p>
+            </div>
+            <ShieldCheck className="w-10 h-10 text-indigo-500" />
           </div>
         </Card>
       </div>

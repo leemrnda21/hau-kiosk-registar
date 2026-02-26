@@ -7,10 +7,16 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status")?.trim();
+    const onHold = searchParams.get("onHold")?.trim();
+    const deactivated = searchParams.get("deactivated")?.trim();
     const statusFilter = status ? (status as "Pending" | "Active" | "Rejected") : undefined;
 
     const students = await prisma.student.findMany({
-      where: statusFilter ? { status: statusFilter } : undefined,
+      where: {
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(onHold === "true" ? { isOnHold: true } : {}),
+        ...(deactivated === "true" ? { isDeactivated: true } : {}),
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -21,6 +27,11 @@ export async function GET(request: Request) {
         course: true,
         yearLevel: true,
         status: true,
+        isOnHold: true,
+        holdReason: true,
+        holdUntil: true,
+        isDeactivated: true,
+        deactivatedAt: true,
         createdAt: true,
       },
     });
