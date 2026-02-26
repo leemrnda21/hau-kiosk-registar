@@ -15,6 +15,7 @@ type RequestItem = {
   status: string
   requestedAt: string
   completedAt?: string | null
+  deliveryMethod?: string | null
 }
 
 export default function PrintPage() {
@@ -149,10 +150,12 @@ export default function PrintPage() {
   }
 
   const isReady = request.status === "ready"
+  const allowsPrint =
+    request.deliveryMethod === "Pick-up at Registrar" || request.deliveryMethod === "Pick-up + Digital Copy"
 
   return (
     <div className="min-h-screen bg-background">
-      {isReady && (
+      {isReady && allowsPrint && (
         <iframe
           ref={iframeRef}
           title="Document Print"
@@ -231,12 +234,17 @@ export default function PrintPage() {
                     setPrintStatus("printing")
                     iframeRef.current.contentWindow.print()
                   }}
-                  disabled={!isReady || !pdfLoaded}
+                  disabled={!isReady || !pdfLoaded || !allowsPrint}
                 >
                   <Printer className="w-4 h-4 mr-2" />
                   {printStatus === "printing" ? "Printing..." : "Print Now"}
                 </Button>
               </div>
+              {isReady && !allowsPrint && (
+                <p className="text-sm text-amber-700">
+                  This request is set for digital copy only. Printing is not available.
+                </p>
+              )}
               {printStatus === "blocked" && (
                 <p className="text-sm text-amber-700">
                   Auto-print was blocked. Please tap Print Now.

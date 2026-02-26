@@ -71,6 +71,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
+    if (requestRecord.deliveryMethod === "Pick-up at Registrar") {
+      return NextResponse.json(
+        { success: false, message: "This request is for pickup only." },
+        { status: 403 }
+      );
+    }
+
     const pdfBytes = await generateDocumentPdf(requestRecord.student, {
       id: requestRecord.id,
       referenceNo: requestRecord.referenceNo,

@@ -25,6 +25,7 @@ export default function DownloadsPage() {
       status: DocumentStatus
       requestedAt: string
       completedAt?: string | null
+      deliveryMethod?: string | null
     }>
   >([])
   const [isLoading, setIsLoading] = useState(true)
@@ -293,7 +294,12 @@ export default function DownloadsPage() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-2 no-print">
-                      {doc.status === "ready" && (
+                      <p className="text-xs text-muted-foreground">
+                        Release: {doc.deliveryMethod || "--"}
+                      </p>
+                      {doc.status === "ready" &&
+                        (doc.deliveryMethod === "Digital Copy" ||
+                          doc.deliveryMethod === "Pick-up + Digital Copy") && (
                         <div className="flex items-center gap-2">
                           <Input
                             placeholder="Recipient email"
@@ -323,7 +329,9 @@ export default function DownloadsPage() {
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Preview
                       </Button>
-                      {doc.status === "ready" && (
+                      {doc.status === "ready" &&
+                        (doc.deliveryMethod === "Pick-up at Registrar" ||
+                          doc.deliveryMethod === "Pick-up + Digital Copy") && (
                         <>
                           <Button size="sm" variant="outline" asChild>
                             <Link href={`/dashboard/print?requestId=${encodeURIComponent(doc.id)}&auto=1`}>

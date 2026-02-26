@@ -30,6 +30,15 @@ export async function GET(request: Request) {
     const requests = await prisma.documentRequest.findMany({
       where: { studentId: student.id },
       orderBy: { requestedAt: "desc" },
+      select: {
+        id: true,
+        referenceNo: true,
+        type: true,
+        status: true,
+        requestedAt: true,
+        completedAt: true,
+        deliveryMethod: true,
+      },
     });
 
     return NextResponse.json({ success: true, requests });

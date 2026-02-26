@@ -36,6 +36,7 @@ const steps = [
 const deliveryMethods = [
   { id: "pickup", name: "Pick-up at Registrar", description: "Available after payment once approved by the registrar" },
   { id: "digital", name: "Digital Copy", description: "Available after payment once approved by the registrar" },
+  { id: "both", name: "Pick-up + Digital Copy", description: "Print at registrar and receive a digital copy" },
 ]
 
 export default function RequestPage() {
@@ -297,7 +298,7 @@ export default function RequestPage() {
                 ))}
               </div>
 
-              {deliveryMethod === "pickup" && (
+              {(deliveryMethod === "pickup" || deliveryMethod === "both") && (
                 <div className="grid md:grid-cols-2 gap-4 mt-4">
                   <div className="space-y-2">
                     <Label htmlFor="pickupDate">Preferred Pickup Date</Label>
