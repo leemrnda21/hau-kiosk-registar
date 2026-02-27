@@ -13,10 +13,35 @@ import { Label } from "@/components/ui/label"
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitted(true)
+    setIsLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.message || "Unable to send reset link. Please try again.")
+        setIsLoading(false)
+        return
+      }
+
+      setIsSubmitted(true)
+    } catch (submitError) {
+      console.error("Forgot password error:", submitError)
+      setError("Unable to send reset link. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -36,10 +61,17 @@ export default function ForgotPasswordPage() {
             <>
               <div className="text-center mb-8">
                 <h1 className="text-2xl font-bold text-foreground mb-2">Forgot Password?</h1>
-                <p className="text-sm text-muted-foreground">Enter your email and we'll send you a reset link</p>
+                <p className="text-sm text-muted-foreground">
+                  Enter your registered email to verify your account. We'll send the reset link to our support inbox.
+                </p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <div className="p-4 bg-red-500/10 border border-red-500 rounded-lg">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="email">School Email</Label>
                   <div className="relative">
@@ -55,8 +87,8 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                 </div>
-                <Button type="submit" className="w-full" size="lg">
-                  Send Reset Link
+                <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                  {isLoading ? "Sending..." : "Send Reset Link"}
                 </Button>
               </form>
             </>

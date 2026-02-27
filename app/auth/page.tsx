@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Mail, User, Camera } from "lucide-react"
+import { ArrowLeft, Mail, Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
@@ -208,10 +208,10 @@ export default function AuthPage() {
             </Card>
           )}
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="flex flex-wrap justify-center gap-6">
             {/* Email Login */}
             <Card
-              className={`p-6 transition-all hover:shadow-lg ${
+              className={`w-full max-w-sm p-6 transition-all hover:shadow-lg ${
                 selectedMethod === "email" ? "border-2 border-primary" : ""
               } ${pendingApproval && approvalStatus !== "active" ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
               title={
@@ -239,7 +239,7 @@ export default function AuthPage() {
 
             {/* Facial Recognition */}
             <Card
-              className={`p-6 transition-all hover:shadow-lg ${
+              className={`w-full max-w-sm p-6 transition-all hover:shadow-lg ${
                 selectedMethod === "face" ? "border-2 border-primary" : ""
               } ${forceEmailLogin ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
               title={forceEmailLogin ? "Complete email login to enable facial sign-in." : undefined}
@@ -261,41 +261,16 @@ export default function AuthPage() {
               </div>
             </Card>
 
-            {/* Combined Method */}
-            <Card
-              className={`p-6 transition-all hover:shadow-lg ${
-                selectedMethod === "combined" ? "border-2 border-primary" : ""
-              } ${forceEmailLogin ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-              title={forceEmailLogin ? "Complete email login to enable combined sign-in." : undefined}
-              onClick={() => {
-                if (forceEmailLogin) {
-                  return
-                }
-                setSelectedMethod("combined")
-              }}
-            >
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-                  <User className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-foreground mb-2">Combined</h3>
-                  <p className="text-sm text-muted-foreground">Email + Student ID + Face (Most Secure)</p>
-                </div>
-              </div>
-            </Card>
           </div>
 
           {selectedMethod && (
             <div className="mt-8 flex justify-center">
               <Button size="lg" asChild>
-                <Link href={selectedMethod === "email" ? "/auth/email" : selectedMethod === "face" ? "/auth/face-student" : "/auth/combined"}>
+                <Link href={selectedMethod === "email" ? "/auth/email" : "/auth/face-student"}>
                   Continue with{" "}
                   {selectedMethod === "email"
                     ? "Email"
-                    : selectedMethod === "face"
-                      ? "Facial Recognition"
-                      : "Combined Method"}
+                    : "Facial Recognition"}
                 </Link>
               </Button>
             </div>

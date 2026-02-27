@@ -34,7 +34,22 @@ model Student {
   enrollments Enrollment[]
   faceEnrollment FaceEnrollment?
   documentRequests DocumentRequest[]
+  passwordResetTokens PasswordResetToken[]
   createdAt   DateTime     @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  ip        String?
+  userAgent String?
+  @@index([studentId, createdAt])
+  @@index([expiresAt])
 }
 
 model Admin {
