@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { broadcastEvent } from "@/lib/sse-broker";
+import { ensureStudentGrades } from "@/lib/grades";
+import { ensureStudentDocumentRequests } from "@/lib/document-requests";
 
 export const runtime = "nodejs";
 
@@ -57,6 +59,11 @@ export async function PATCH(request: Request, context: { params: { id: string } 
       where: { id },
       data: updateData,
     });
+
+    if (action === "approve") {
+      await ensureStudentGrades(updated.id, updated.studentNo)
+      await ensureStudentDocumentRequests(updated.id, updated.studentNo)
+    }
 
     await prisma.adminAuditLog.create({
       data: {

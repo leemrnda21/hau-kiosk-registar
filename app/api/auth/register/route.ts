@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { broadcastEvent } from "@/lib/sse-broker";
+import { ensureStudentGrades } from "@/lib/grades";
+import { ensureStudentDocumentRequests } from "@/lib/document-requests";
 
 export const runtime = "nodejs";
 
@@ -72,6 +74,9 @@ export async function POST(request: Request) {
         status: true,
       },
     });
+
+    await ensureStudentGrades(student.id, student.studentNo)
+    await ensureStudentDocumentRequests(student.id, student.studentNo)
 
     broadcastEvent({
       type: "student-created",
