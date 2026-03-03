@@ -71,7 +71,7 @@ const main = async () => {
   const studentPasswordHash = await bcrypt.hash(studentPassword, 10);
   const sampleStudents = [
     {
-      studentNo: "2024-100001",
+      studentNo: "20900580",
       firstName: "Juan",
       lastName: "Dela Cruz",
       email: "juan.delacruz@student.hau.edu.ph",
@@ -79,7 +79,7 @@ const main = async () => {
       yearLevel: "1st Year",
     },
     {
-      studentNo: "2024-100002",
+      studentNo: "20900581",
       firstName: "Maria",
       lastName: "Santos",
       email: "maria.santos@student.hau.edu.ph",
@@ -87,7 +87,7 @@ const main = async () => {
       yearLevel: "2nd Year",
     },
     {
-      studentNo: "2024-100003",
+      studentNo: "20900582",
       firstName: "Paolo",
       lastName: "Garcia",
       email: "paolo.garcia@student.hau.edu.ph",
@@ -95,7 +95,7 @@ const main = async () => {
       yearLevel: "3rd Year",
     },
     {
-      studentNo: "2024-100004",
+      studentNo: "20900583",
       firstName: "Anne",
       lastName: "Reyes",
       email: "anne.reyes@student.hau.edu.ph",
@@ -103,7 +103,7 @@ const main = async () => {
       yearLevel: "1st Year",
     },
     {
-      studentNo: "2024-100005",
+      studentNo: "20900584",
       firstName: "Miguel",
       lastName: "Torres",
       email: "miguel.torres@student.hau.edu.ph",
@@ -111,7 +111,7 @@ const main = async () => {
       yearLevel: "4th Year",
     },
     {
-      studentNo: "2024-100006",
+      studentNo: "20900585",
       firstName: "Lea",
       lastName: "Cruz",
       email: "lea.cruz@student.hau.edu.ph",
@@ -119,7 +119,7 @@ const main = async () => {
       yearLevel: "2nd Year",
     },
     {
-      studentNo: "2024-100007",
+      studentNo: "20900586",
       firstName: "Carlo",
       lastName: "Aquino",
       email: "carlo.aquino@student.hau.edu.ph",
@@ -127,7 +127,7 @@ const main = async () => {
       yearLevel: "3rd Year",
     },
     {
-      studentNo: "2024-100008",
+      studentNo: "20900587",
       firstName: "Jasmine",
       lastName: "Lopez",
       email: "jasmine.lopez@student.hau.edu.ph",
@@ -135,7 +135,7 @@ const main = async () => {
       yearLevel: "4th Year",
     },
     {
-      studentNo: "2024-100009",
+      studentNo: "20900588",
       firstName: "Mark",
       lastName: "Valdez",
       email: "mark.valdez@student.hau.edu.ph",
@@ -143,7 +143,7 @@ const main = async () => {
       yearLevel: "2nd Year",
     },
     {
-      studentNo: "2024-100010",
+      studentNo: "20900589",
       firstName: "Elise",
       lastName: "Navarro",
       email: "elise.navarro@student.hau.edu.ph",
@@ -153,17 +153,18 @@ const main = async () => {
   ];
 
   for (const student of sampleStudents) {
-    const existingStudent = await prisma.student.findFirst({
-      where: {
-        OR: [{ studentNo: student.studentNo }, { email: student.email }],
+    await prisma.student.upsert({
+      where: { email: student.email },
+      update: {
+        studentNo: student.studentNo,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        course: student.course,
+        yearLevel: student.yearLevel,
+        passwordHash: studentPasswordHash,
+        status: "Active",
       },
-      select: { id: true },
-    });
-    if (existingStudent) {
-      continue;
-    }
-    await prisma.student.create({
-      data: {
+      create: {
         studentNo: student.studentNo,
         firstName: student.firstName,
         lastName: student.lastName,
